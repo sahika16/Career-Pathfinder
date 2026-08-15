@@ -12,7 +12,15 @@ import TrainerDashboard from './pages/dashboard/TrainerDashboard'
 import AdminDashboard from './pages/dashboard/AdminDashboard'
 import ProtectedRoute from './components/ProtectedRoute'
 
-// Session timeout in milliseconds (3 hours = 10800000ms, 4 hours = 14400000ms)
+// ====== Assessment Pages ======
+import AssessmentPage from './pages/AssessmentPage'
+import TestResultsPage from './pages/TestResultsPage'
+
+// ====== Admin Pages ======
+import AdminSkills from './pages/AdminSkills'
+import AdminStudents from './pages/AdminStudents'
+import AdminTrainers from './pages/AdminTrainers'
+
 const SESSION_TIMEOUT = 3 * 60 * 60 * 1000 // 3 hours
 
 function AppContent() {
@@ -31,9 +39,7 @@ function AppContent() {
     if (storedUser && loginTime) {
       const elapsed = Date.now() - parseInt(loginTime)
       
-      // Check if session has expired
       if (elapsed > SESSION_TIMEOUT) {
-        // Session expired - auto logout
         localStorage.removeItem('careerUser')
         localStorage.removeItem('careerLoginTime')
         setUser(null)
@@ -58,7 +64,6 @@ function AppContent() {
     localStorage.setItem('careerUser', JSON.stringify(userData))
     localStorage.setItem('careerLoginTime', Date.now().toString())
     
-    // Redirect based on role
     if (userData.role === 'student') {
       navigate('/student-dashboard')
     } else if (userData.role === 'trainer') {
@@ -96,12 +101,50 @@ function AppContent() {
       {/* Login Routes */}
       <Route path="/login/student" element={<StudentLogin onLogin={handleLogin} />} />
       <Route path="/login/trainer" element={<TrainerLoginPage />} />
-      <Route path="/login/admin" element={<AdminLoginPage />} />
+      <Route path="/login/admin" element={<AdminLoginPage onLogin={handleLogin} />} />
       <Route path="/trainer/register" element={<TrainerRegistration />} />
       
       {/* Skill Routes */}
       <Route path="/skill-review/:resumeId" element={<SkillReviewPage user={user} onLogout={handleLogout} />} />
       <Route path="/skill-rating/:resumeId" element={<SkillRatingPage user={user} onLogout={handleLogout} />} />
+      
+      {/* Assessment Routes */}
+      <Route path="/assessment/:resumeId/:skillName" element={
+        <ProtectedRoute user={user} allowedRoles={['student']}>
+          <AssessmentPage user={user} onLogout={handleLogout} />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/results/:resumeId/:skillName" element={
+        <ProtectedRoute user={user} allowedRoles={['student']}>
+          <TestResultsPage user={user} onLogout={handleLogout} />
+        </ProtectedRoute>
+      } />
+      
+      {/* Admin Routes */}
+      <Route path="/admin-dashboard" element={
+        <ProtectedRoute user={user} allowedRoles={['admin']}>
+          <AdminDashboard user={user} onLogout={handleLogout} />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/admin/skills" element={
+        <ProtectedRoute user={user} allowedRoles={['admin']}>
+          <AdminSkills user={user} onLogout={handleLogout} />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/admin/students" element={
+        <ProtectedRoute user={user} allowedRoles={['admin']}>
+          <AdminStudents user={user} onLogout={handleLogout} />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/admin/trainers" element={
+        <ProtectedRoute user={user} allowedRoles={['admin']}>
+          <AdminTrainers user={user} onLogout={handleLogout} />
+        </ProtectedRoute>
+      } />
       
       {/* Dashboard Routes */}
       <Route path="/student-dashboard" element={
@@ -113,12 +156,6 @@ function AppContent() {
       <Route path="/trainer-dashboard" element={
         <ProtectedRoute user={user} allowedRoles={['trainer', 'admin']}>
           <TrainerDashboard user={user} onLogout={handleLogout} />
-        </ProtectedRoute>
-      } />
-      
-      <Route path="/admin-dashboard" element={
-        <ProtectedRoute user={user} allowedRoles={['admin']}>
-          <AdminDashboard user={user} onLogout={handleLogout} />
         </ProtectedRoute>
       } />
       

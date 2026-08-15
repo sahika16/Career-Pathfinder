@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Navbar from '../../components/Navbar'
 import axios from 'axios'
 
-function AdminLoginPage() {
+function AdminLoginPage({ onLogin }) {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -32,13 +32,15 @@ function AdminLoginPage() {
       alert(`Welcome, ${data.name}!`)
       
       const userData = {
-        name: data.name,
+        id: data.id || 1,
+        name: data.name || 'Admin',
         email: data.email,
         role: 'admin'
       }
       
-      localStorage.setItem('careerUser', JSON.stringify(userData))
-      window.location.href = '/admin-dashboard'
+      // Call the onLogin function from App.jsx
+      // This will handle localStorage and navigation
+      onLogin(userData)
       
     } catch (err) {
       setError(err.response?.data?.detail || 'Invalid credentials. Please try again.')
@@ -47,12 +49,16 @@ function AdminLoginPage() {
     }
   }
 
+  const handleBackToHome = () => {
+    navigate('/')
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <Navbar />
       <div className="max-w-md mx-auto pt-24 pb-12 px-6">
         <button
-          onClick={() => navigate('/')}
+          onClick={handleBackToHome}
           className="flex items-center space-x-2 text-gray-500 hover:text-blue-600 transition mb-4"
         >
           <span className="text-xl">←</span>

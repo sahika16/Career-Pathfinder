@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../../components/Navbar'
-import { getUserProgress } from '../../utils/api'
+import { getUserProgress, getAssessmentSkills } from '../../utils/api'
 
 function StudentDashboard({ user, onLogout }) {
   const navigate = useNavigate()
   const [progress, setProgress] = useState(null)
+  const [assessmentSkills, setAssessmentSkills] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (user?.resumeId) {
       fetchProgress()
+      fetchAssessmentSkills()
     }
   }, [user])
 
@@ -20,6 +22,15 @@ function StudentDashboard({ user, onLogout }) {
       setProgress(data)
     } catch (error) {
       console.error('Error fetching progress:', error)
+    }
+  }
+
+  const fetchAssessmentSkills = async () => {
+    try {
+      const skills = await getAssessmentSkills(user.resumeId)
+      setAssessmentSkills(skills)
+    } catch (error) {
+      console.error('Error fetching assessment skills:', error)
     } finally {
       setLoading(false)
     }
@@ -28,17 +39,23 @@ function StudentDashboard({ user, onLogout }) {
   const handleContinue = () => {
     if (!progress) return
     
-    // Navigate to where user left off
     if (progress.skills_rated && progress.total_skills > 0) {
       // User has rated skills - go to assessment
-      navigate('/assessment', { state: { resumeId: user.resumeId } })
+      if (assessmentSkills.length > 0) {
+        // Start with first skill
+        navigate(`/assessment/${user.resumeId}/${assessmentSkills[0].skill_name}`)
+      } else {
+        alert('No skills available for assessment. Please contact admin.')
+      }
     } else if (progress.has_skills && progress.total_skills > 0) {
-      // User has skills but not rated - go to rating
       navigate(`/skill-rating/${user.resumeId}`)
     } else {
-      // No skills - go to review
       navigate(`/skill-review/${user.resumeId}`)
     }
+  }
+
+  const handleStartAssessment = (skillName) => {
+    navigate(`/assessment/${user.resumeId}/${skillName}`)
   }
 
   const handleStartNew = () => {
@@ -76,7 +93,7 @@ function StudentDashboard({ user, onLogout }) {
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <Navbar user={user} onLogout={onLogout} />
       
-      <div className="max-w-4xl mx-auto pt-28 pb-12 px-6">
+      <div className="max-w-6xl mx-auto pt-28 pb-12 px-6">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-extrabold text-gray-900">
             Welcome Back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">{user?.name || 'Student'}</span>
@@ -85,7 +102,7 @@ function StudentDashboard({ user, onLogout }) {
         </div>
 
         {/* Progress Card */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+        <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 mb-8">
           <h2 className="text-xl font-bold text-gray-800 mb-6">📊 Your Progress</h2>
           
           <div className="space-y-4">
@@ -121,6 +138,33 @@ function StudentDashboard({ user, onLogout }) {
             ))}
           </div>
         </div>
+
+        {/* Assessment Skills Section */}
+        {progress?.skills_rated && assessmentSkills.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 mb-8">
+            <h2 className="text-xl font-bold text-gray-800 mb-6">📝 Available Assessments</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {assessmentSkills.map((skill) => (
+                <div key={skill.id} className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:shadow-md transition">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="font-semibold text-gray-800">{skill.skill_name}</h3>
+                      <p className="text-sm text-gray-500">
+                        Rating: {skill.rating}/10 • {skill.rating_level || 'Not Rated'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleStartAssessment(skill.skill_name)}
+                      className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:shadow-lg transition"
+                    >
+                      Start Test
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Continue Button */}
         <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">

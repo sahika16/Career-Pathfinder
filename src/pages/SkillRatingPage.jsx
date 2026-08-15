@@ -52,11 +52,12 @@ function SkillRatingPage({ user, onLogout }) {
       
       await updateResumeStatus(resumeId, {
         skills_rated: true,
-        current_step: 'login'
+        current_step: 'assessment'
       })
       
       alert('Ratings saved successfully!')
-      navigate('/login')
+      // Navigate to dashboard instead of login
+      navigate('/student-dashboard')
     } catch (err) {
       setError('Failed to save ratings. Please try again.')
       setSaving(false)

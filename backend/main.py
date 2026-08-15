@@ -11,6 +11,11 @@ from database import engine, get_db
 from resume_parser import parse_resume
 import random
 from datetime import datetime, timedelta
+from assessment import (
+    generate_test_for_skill, 
+    evaluate_test_submission, 
+    get_test_results
+)
 
 # ====== ENVIRONMENT VARIABLES ======
 import os
@@ -800,7 +805,6 @@ def get_all_trainers(db: Session = Depends(get_db)):
         for t in trainers
     ]
 
-# ====== ADMIN: Get All Students ======
 @app.get("/api/admin/students")
 def get_all_students(db: Session = Depends(get_db)):
     students = db.query(models.Resume).filter(models.Resume.role == 'student').all()
@@ -817,6 +821,285 @@ def get_all_students(db: Session = Depends(get_db)):
         }
         for s in students
     ]
+
+# ====== ASSESSMENT ENDPOINTS ======
+
+@app.get("/api/test/generate/{resume_id}/{skill_name}")
+def generate_test(resume_id: int, skill_name: str, db: Session = Depends(get_db)):
+    """Generate a test for a specific skill"""
+    resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    
+    # Get the skill rating
+    skill = db.query(models.Skill).filter(
+        models.Skill.resume_id == resume_id,
+        models.Skill.skill_name == skill_name
+    ).first()
+    
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    
+    if skill.rating is None:
+        raise HTTPException(status_code=400, detail="Skill not rated yet")
+    
+    # Determine difficulty based on rating
+    if skill.rating <= 4:
+        difficulty = "Easy"
+    elif skill.rating <= 7:
+        difficulty = "Medium"
+    else:
+        difficulty = "Hard"
+    
+    # Generate test questions
+    questions = generate_test_for_skill(skill_name, difficulty, db)
+    
+    if not questions:
+        raise HTTPException(status_code=404, detail=f"No questions found for {skill_name} with {difficulty} difficulty")
+    
+    # Return questions (without correct answer for student)
+    return {
+        "skill": skill_name,
+        "difficulty": difficulty,
+        "rating": skill.rating,
+        "total_questions": len(questions),
+        "questions": [
+            {
+                "id": q.id,
+                "question_text": q.question_text,
+                "option_a": q.option_a,
+                "option_b": q.option_b,
+                "option_c": q.option_c,
+                "option_d": q.option_d
+            }
+            for q in questions
+        ]
+    }
+
+@app.post("/api/test/submit")
+def submit_test(submission_data: dict, db: Session = Depends(get_db)):
+    """Submit test answers and evaluate"""
+    resume_id = submission_data.get('resume_id')
+    skill_name = submission_data.get('skill_name')
+    answers = submission_data.get('answers', {})  # {question_id: user_answer}
+    
+    if not resume_id or not skill_name:
+        raise HTTPException(status_code=400, detail="resume_id and skill_name are required")
+    
+    # Evaluate answers
+    results = evaluate_test_submission(resume_id, skill_name, answers, db)
+    
+    return results
+
+@app.get("/api/test/results/{resume_id}/{skill_name}")
+def get_test_results_by_skill(resume_id: int, skill_name: str, db: Session = Depends(get_db)):
+    """Get test results for a specific skill"""
+    summary = db.query(models.TestSummary).filter(
+        models.TestSummary.resume_id == resume_id,
+        models.TestSummary.skill_name == skill_name
+    ).first()
+    
+    if not summary:
+        raise HTTPException(status_code=404, detail="No test results found for this skill")
+    
+    # Get individual question results
+    results = db.query(models.TestResult).filter(
+        models.TestResult.resume_id == resume_id,
+        models.TestResult.skill_name == skill_name
+    ).all()
+    
+    return {
+        "summary": {
+            "skill_name": summary.skill_name,
+            "total_questions": summary.total_questions,
+            "correct_answers": summary.correct_answers,
+            "score_percentage": summary.score_percentage,
+            "result_status": summary.result_status,
+            "test_date": summary.test_date
+        },
+        "details": [
+            {
+                "question_id": r.question_id,
+                "user_answer": r.user_answer,
+                "is_correct": r.is_correct
+            }
+            for r in results
+        ]
+    }
+
+@app.get("/api/test/all-results/{resume_id}")
+def get_all_test_results(resume_id: int, db: Session = Depends(get_db)):
+    """Get all test results for a student"""
+    results = db.query(models.TestSummary).filter(
+        models.TestSummary.resume_id == resume_id
+    ).all()
+    
+    return [
+        {
+            "skill_name": r.skill_name,
+            "total_questions": r.total_questions,
+            "correct_answers": r.correct_answers,
+            "score_percentage": r.score_percentage,
+            "result_status": r.result_status,
+            "test_date": r.test_date
+        }
+        for r in results
+    ]
+
+# ====== ADMIN: Question Management ======
+
+@app.post("/api/admin/question")
+def add_question(question_data: dict, db: Session = Depends(get_db)):
+    """Admin adds a new question"""
+    new_question = models.Question(
+        skill_name=question_data.get('skill_name'),
+        difficulty=question_data.get('difficulty'),
+        question_text=question_data.get('question_text'),
+        option_a=question_data.get('option_a'),
+        option_b=question_data.get('option_b'),
+        option_c=question_data.get('option_c'),
+        option_d=question_data.get('option_d'),
+        correct_answer=question_data.get('correct_answer'),
+        explanation=question_data.get('explanation')
+    )
+    
+    db.add(new_question)
+    db.commit()
+    db.refresh(new_question)
+    
+    return {"message": "Question added successfully", "id": new_question.id}
+
+@app.get("/api/admin/questions")
+def get_all_questions(db: Session = Depends(get_db)):
+    """Admin gets all questions"""
+    questions = db.query(models.Question).all()
+    
+    return [
+        {
+            "id": q.id,
+            "skill_name": q.skill_name,
+            "difficulty": q.difficulty,
+            "question_text": q.question_text,
+            "option_a": q.option_a,
+            "option_b": q.option_b,
+            "option_c": q.option_c,
+            "option_d": q.option_d,
+            "correct_answer": q.correct_answer,
+            "explanation": q.explanation
+        }
+        for q in questions
+    ]
+
+@app.get("/api/admin/questions/{skill_name}")
+def get_questions_by_skill(skill_name: str, db: Session = Depends(get_db)):
+    """Admin gets questions by skill"""
+    questions = db.query(models.Question).filter(
+        models.Question.skill_name == skill_name
+    ).all()
+    
+    return [
+        {
+            "id": q.id,
+            "skill_name": q.skill_name,
+            "difficulty": q.difficulty,
+            "question_text": q.question_text,
+            "options": {
+                "A": q.option_a,
+                "B": q.option_b,
+                "C": q.option_c,
+                "D": q.option_d
+            },
+            "correct_answer": q.correct_answer,
+            "explanation": q.explanation
+        }
+        for q in questions
+    ]
+
+@app.put("/api/admin/question/{question_id}")
+def update_question(question_id: int, question_data: dict, db: Session = Depends(get_db)):
+    """Admin updates a question"""
+    question = db.query(models.Question).filter(models.Question.id == question_id).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    
+    for key, value in question_data.items():
+        if hasattr(question, key) and value is not None:
+            setattr(question, key, value)
+    
+    db.commit()
+    db.refresh(question)
+    
+    return {"message": "Question updated successfully"}
+
+@app.delete("/api/admin/question/{question_id}")
+def delete_question(question_id: int, db: Session = Depends(get_db)):
+    """Admin deletes a question"""
+    question = db.query(models.Question).filter(models.Question.id == question_id).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    
+    db.delete(question)
+    db.commit()
+    
+    return {"message": "Question deleted successfully"}
+
+@app.get("/api/admin/skills-list")
+def get_all_skill_names(db: Session = Depends(get_db)):
+    """Get all unique skill names from questions"""
+    skills = db.query(models.Question.skill_name).distinct().all()
+    return {"skills": [s[0] for s in skills]}
+
+@app.get("/api/assessment/skills/{resume_id}")
+def get_assessment_skills(resume_id: int, db: Session = Depends(get_db)):
+    """Get all skills with ratings for assessment"""
+    skills = db.query(models.Skill).filter(
+        models.Skill.resume_id == resume_id,
+        models.Skill.rating.isnot(None)
+    ).all()
+    
+    return [
+        {
+            "id": s.id,
+            "skill_name": s.skill_name,
+            "rating": s.rating,
+            "rating_level": s.rating_level
+        }
+        for s in skills
+    ]
+
+@app.post("/api/admin/skill")
+def add_skill(skill_data: dict, db: Session = Depends(get_db)):
+    """Admin adds a new skill (creates a placeholder question)"""
+    skill_name = skill_data.get('skill_name')
+    if not skill_name:
+        raise HTTPException(status_code=400, detail="Skill name is required")
+    
+    # Check if skill already exists
+    existing = db.query(models.Question).filter(
+        models.Question.skill_name == skill_name
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="Skill already exists")
+    
+    # Create a placeholder question to add the skill
+    new_question = models.Question(
+        skill_name=skill_name,
+        difficulty='Medium',
+        question_text=f'Question for {skill_name} - please edit',
+        option_a='Option A',
+        option_b='Option B',
+        option_c='Option C',
+        option_d='Option D',
+        correct_answer='A',
+        explanation=''
+    )
+    
+    db.add(new_question)
+    db.commit()
+    db.refresh(new_question)
+    
+    return {"message": f"Skill '{skill_name}' added successfully", "id": new_question.id}
 
 @app.get("/api/health")
 def health_check():

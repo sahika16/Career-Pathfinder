@@ -39,6 +39,7 @@ class Resume(Base):
     
     skills = relationship("Skill", back_populates="resume", cascade="all, delete-orphan")
     concept_skills = relationship("ConceptSkill", back_populates="resume", cascade="all, delete-orphan")
+    test_results = relationship("TestResult", back_populates="resume", cascade="all, delete-orphan")
 
 class Skill(Base):
     __tablename__ = "skills"
@@ -62,3 +63,53 @@ class ConceptSkill(Base):
     rating_level = Column(String(20), nullable=True)
     
     resume = relationship("Resume", back_populates="concept_skills")
+
+# ====== NEW: Assessment Models ======
+class Question(Base):
+    __tablename__ = "questions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    skill_name = Column(String(100), nullable=False)
+    difficulty = Column(String(20), nullable=False)  # Easy, Medium, Hard
+    question_text = Column(Text, nullable=False)
+    option_a = Column(Text, nullable=False)
+    option_b = Column(Text, nullable=False)
+    option_c = Column(Text, nullable=False)
+    option_d = Column(Text, nullable=False)
+    correct_answer = Column(String(1), nullable=False)  # A, B, C, D
+    explanation = Column(Text, nullable=True)
+    created_by = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationship with test results
+    test_results = relationship("TestResult", back_populates="question")
+
+class TestResult(Base):
+    __tablename__ = "test_results"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    resume_id = Column(Integer, ForeignKey("resumes.id"))
+    skill_name = Column(String(100), nullable=False)
+    question_id = Column(Integer, ForeignKey("questions.id"))
+    user_answer = Column(String(1), nullable=True)  # A, B, C, D
+    is_correct = Column(Boolean, default=False)
+    test_date = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    resume = relationship("Resume", back_populates="test_results")
+    question = relationship("Question", back_populates="test_results")
+
+# ====== NEW: Test Summary Model ======
+class TestSummary(Base):
+    __tablename__ = "test_summaries"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    resume_id = Column(Integer, ForeignKey("resumes.id"))
+    skill_name = Column(String(100), nullable=False)
+    total_questions = Column(Integer, nullable=False)
+    correct_answers = Column(Integer, nullable=False)
+    score_percentage = Column(Float, nullable=False)
+    result_status = Column(String(20), nullable=False)  # Passed, Failed
+    test_date = Column(DateTime(timezone=True), server_default=func.now())
+    
+    resume = relationship("Resume")
