@@ -55,9 +55,12 @@ function SkillRatingPage({ user, onLogout }) {
         current_step: 'assessment'
       })
       
-      alert('Ratings saved successfully!')
-      // Navigate to dashboard instead of login
-      navigate('/student-dashboard')
+      alert('✅ Ratings saved successfully!')
+      
+      // ====== DIRECTLY GO TO ASSESSMENT ======
+      // This ensures user goes to assessment right after rating
+      navigate(`/assessment/${resumeId}`, { replace: true })
+      
     } catch (err) {
       setError('Failed to save ratings. Please try again.')
       setSaving(false)

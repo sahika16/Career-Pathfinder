@@ -13,7 +13,6 @@ function TestResultsPage({ user, onLogout }) {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    // Check if results passed from state
     if (location.state?.results) {
       setResults(location.state.results)
       setLoading(false)
@@ -44,11 +43,11 @@ function TestResultsPage({ user, onLogout }) {
   }
 
   const getRecommendation = (score, status) => {
-    if (score >= 90) return '🏆 Excellent! You\'re ready for advanced challenges.'
-    if (score >= 70) return '✅ Good work! Keep practicing to reach expert level.'
-    if (score >= 60) return '⚠️ You passed! Focus on improving weak areas.'
-    if (score >= 50) return '🔄 You need improvement. Review the basics.'
-    return '❌ Strongly recommend revisiting fundamentals.'
+    if (score >= 90) return 'Excellent! You\'re ready for advanced challenges.'
+    if (score >= 70) return 'Good work! Keep practicing to reach expert level.'
+    if (score >= 60) return 'You passed! Focus on improving weak areas.'
+    if (score >= 50) return 'You need improvement. Review the basics.'
+    return 'Strongly recommend revisiting fundamentals.'
   }
 
   if (loading) {
@@ -92,20 +91,18 @@ function TestResultsPage({ user, onLogout }) {
       <Navbar user={user} onLogout={onLogout} />
       
       <div className="max-w-3xl mx-auto pt-28 pb-12 px-6">
-        {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-block bg-gradient-to-r from-green-500 to-emerald-500 text-white px-6 py-2 rounded-full text-sm font-bold uppercase tracking-wider shadow-lg">
-            ✅ Test Completed
+            Test Completed
           </div>
           <h1 className="text-4xl font-extrabold text-gray-900 mt-4">
             {summary?.skill_name} Assessment
           </h1>
           <p className="text-gray-600 mt-2">
-            {summary?.result_status === 'Passed' ? '🎉 Congratulations!' : '📚 Keep learning!'}
+            {summary?.result_status === 'Passed' ? 'Congratulations!' : 'Keep learning!'}
           </p>
         </div>
 
-        {/* Score Card */}
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 mb-8">
           <div className="text-center">
             <div className={`text-6xl font-bold ${getScoreColor(summary?.score_percentage)}`}>
@@ -137,17 +134,15 @@ function TestResultsPage({ user, onLogout }) {
           </div>
         </div>
 
-        {/* Recommendation */}
         <div className="bg-blue-50 rounded-2xl p-6 border border-blue-200 mb-8">
-          <h3 className="font-bold text-blue-800 mb-2">💡 Recommendation</h3>
+          <h3 className="font-bold text-blue-800 mb-2">Recommendation</h3>
           <p className="text-blue-700">
             {getRecommendation(summary?.score_percentage, summary?.result_status)}
           </p>
         </div>
 
-        {/* Question Details */}
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">📋 Question Review</h2>
+          <h2 className="text-xl font-bold text-gray-800 mb-4">Question Review</h2>
           <div className="space-y-4">
             {details.map((detail, index) => (
               <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
@@ -162,26 +157,25 @@ function TestResultsPage({ user, onLogout }) {
                 <div className={`px-3 py-1 rounded-full text-sm font-medium ${
                   detail.is_correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                 }`}>
-                  {detail.is_correct ? '✅ Correct' : '❌ Incorrect'}
+                  {detail.is_correct ? 'Correct' : 'Incorrect'}
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Buttons */}
         <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
           <button
             onClick={() => navigate('/student-dashboard')}
             className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-xl hover:shadow-lg transition font-semibold"
           >
-            🏠 Back to Dashboard
+            Back to Dashboard
           </button>
           <button
-            onClick={() => navigate(`/assessment/${resumeId}/${skillName}`)}
+            onClick={() => navigate(`/assessment/${resumeId}`)}
             className="bg-gray-200 text-gray-700 px-8 py-3 rounded-xl hover:bg-gray-300 transition font-semibold"
           >
-            📝 Retake Test (If Allowed)
+            Back to Assessments
           </button>
         </div>
       </div>

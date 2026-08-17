@@ -38,7 +38,7 @@ export const updateSkill = async (skillId, data) => {
     }
 }
 
-export const addSkillToResume = async (resumeId, skillName) => {
+export const addSkill = async (resumeId, skillName) => {
     try {
         const response = await axios.post(`${API_BASE_URL}/skills/${resumeId}`, { skill_name: skillName })
         return response.data
@@ -176,6 +176,17 @@ export const getAssessmentSkills = async (resumeId) => {
     }
 }
 
+// ====== NEW: Get Completed Skills ======
+export const getCompletedSkills = async (resumeId) => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/test/completed/${resumeId}`)
+        return response.data
+    } catch (error) {
+        console.error('Error getting completed skills:', error)
+        throw error
+    }
+}
+
 // ====== ADMIN: Question Management ======
 export const addQuestion = async (questionData) => {
     try {
@@ -237,8 +248,7 @@ export const getAllSkillNames = async () => {
     }
 }
 
-// ====== ADMIN: Add New Skill ======
-export const addSkill = async (skillName) => {
+export const addAdminSkill = async (skillName) => {
     try {
         const response = await axios.post(`${API_BASE_URL}/admin/skill`, { skill_name: skillName })
         return response.data
@@ -248,7 +258,6 @@ export const addSkill = async (skillName) => {
     }
 }
 
-// ====== ADMIN: Student Management ======
 export const getAllResumes = async () => {
     try {
         const response = await axios.get(`${API_BASE_URL}/resumes`)

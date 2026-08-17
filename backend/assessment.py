@@ -5,7 +5,6 @@ import models
 from datetime import datetime, timezone
 
 def get_difficulty_from_rating(rating: int) -> str:
-    """Determine difficulty level based on rating"""
     if rating <= 4:
         return "Easy"
     elif rating <= 7:
@@ -13,42 +12,52 @@ def get_difficulty_from_rating(rating: int) -> str:
     else:
         return "Hard"
 
+def has_test_been_taken(resume_id: int, skill_name: str, db: Session) -> bool:
+    """Check if student has already taken test for this skill"""
+    summary = db.query(models.TestSummary).filter(
+        models.TestSummary.resume_id == resume_id,
+        models.TestSummary.skill_name.ilike(skill_name)
+    ).first()
+    return summary is not None
+
 def generate_test_for_skill(skill_name: str, difficulty: str, db: Session, limit: int = None):
-    """
-    Generate test questions for a specific skill and difficulty
-    If limit is not provided, get all available questions
-    """
-    # Get all questions for this skill and difficulty
+    """Generate test questions for a specific skill"""
     questions = db.query(models.Question).filter(
-        models.Question.skill_name == skill_name,
+        models.Question.skill_name.ilike(skill_name),
         models.Question.difficulty == difficulty
     ).all()
     
     if not questions:
+        questions = db.query(models.Question).filter(
+            models.Question.skill_name.ilike(skill_name)
+        ).all()
+    
+    if not questions:
         return []
     
-    # If limit not specified, use all questions
     if limit is None:
         limit = len(questions)
     
-    # Shuffle and select up to limit
     shuffled = random.sample(questions, min(limit, len(questions)))
-    
     return shuffled
 
 def evaluate_test_submission(resume_id: int, skill_name: str, answers: dict, db: Session):
-    """
-    Evaluate student's test submission
-    answers: {question_id: user_answer}
-    """
+    """Evaluate student's test submission"""
+    if has_test_been_taken(resume_id, skill_name, db):
+        return {
+            "error": "You have already completed this test.",
+            "skill_name": skill_name,
+            "already_taken": True
+        }
+    
     total_questions = len(answers)
     correct_count = 0
     results = []
     
-    for question_id, user_answer in answers.items():
-        # Get question from database
+    for question_id_str, user_answer in answers.items():
+        question_id = int(question_id_str)
         question = db.query(models.Question).filter(
-            models.Question.id == int(question_id)
+            models.Question.id == question_id
         ).first()
         
         if not question:
@@ -58,10 +67,9 @@ def evaluate_test_submission(resume_id: int, skill_name: str, answers: dict, db:
         if is_correct:
             correct_count += 1
         
-        # Store individual result
         test_result = models.TestResult(
             resume_id=resume_id,
-            skill_name=skill_name,
+            skill_name=skill_name.lower(),
             question_id=question.id,
             user_answer=user_answer,
             is_correct=is_correct,
@@ -75,14 +83,12 @@ def evaluate_test_submission(resume_id: int, skill_name: str, answers: dict, db:
             "is_correct": is_correct
         })
     
-    # Calculate score
     score_percentage = (correct_count / total_questions) * 100 if total_questions > 0 else 0
     result_status = "Passed" if score_percentage >= 60 else "Failed"
     
-    # Store summary
     summary = models.TestSummary(
         resume_id=resume_id,
-        skill_name=skill_name,
+        skill_name=skill_name.lower(),
         total_questions=total_questions,
         correct_answers=correct_count,
         score_percentage=score_percentage,
@@ -90,7 +96,6 @@ def evaluate_test_submission(resume_id: int, skill_name: str, answers: dict, db:
         test_date=datetime.now(timezone.utc)
     )
     db.add(summary)
-    
     db.commit()
     
     return {
@@ -106,7 +111,7 @@ def get_test_results(resume_id: int, skill_name: str, db: Session):
     """Get test results for a specific skill"""
     summary = db.query(models.TestSummary).filter(
         models.TestSummary.resume_id == resume_id,
-        models.TestSummary.skill_name == skill_name
+        models.TestSummary.skill_name.ilike(skill_name)
     ).first()
     
     if not summary:
@@ -114,7 +119,7 @@ def get_test_results(resume_id: int, skill_name: str, db: Session):
     
     results = db.query(models.TestResult).filter(
         models.TestResult.resume_id == resume_id,
-        models.TestResult.skill_name == skill_name
+        models.TestResult.skill_name.ilike(skill_name)
     ).all()
     
     return {
@@ -137,26 +142,39 @@ def get_test_results(resume_id: int, skill_name: str, db: Session):
     }
 
 def get_available_skills_for_assessment(resume_id: int, db: Session):
-    """Get skills with ratings for assessment"""
+    """Get ALL core skills with ratings for assessment"""
+    # Get all skills that are core (is_core = True or NULL)
     skills = db.query(models.Skill).filter(
         models.Skill.resume_id == resume_id,
         models.Skill.rating.isnot(None)
+    ).filter(
+        (models.Skill.is_core == True) | (models.Skill.is_core.is_(None))
     ).all()
     
     result = []
     for skill in skills:
         # Check if questions exist for this skill
         question_count = db.query(models.Question).filter(
-            models.Question.skill_name == skill.skill_name
+            models.Question.skill_name.ilike(skill.skill_name)
         ).count()
         
-        if question_count > 0:
-            result.append({
-                "id": skill.id,
-                "skill_name": skill.skill_name,
-                "rating": skill.rating,
-                "rating_level": skill.rating_level,
-                "questions_available": question_count
-            })
+        # Check if test already taken
+        already_taken = has_test_been_taken(resume_id, skill.skill_name, db)
+        
+        result.append({
+            "id": skill.id,
+            "skill_name": skill.skill_name,
+            "rating": skill.rating,
+            "rating_level": skill.rating_level,
+            "questions_available": question_count,
+            "already_taken": already_taken
+        })
     
     return result
+
+def get_completed_skills(resume_id: int, db: Session):
+    """Get all skills that the student has already completed"""
+    summaries = db.query(models.TestSummary).filter(
+        models.TestSummary.resume_id == resume_id
+    ).all()
+    return [s.skill_name for s in summaries]

@@ -1,131 +1,23 @@
 import re
 
-# ====== CORE SKILLS FOR TESTING ======
-CORE_SKILLS = {
-    # Programming Languages
-    'python', 'java', 'javascript', 'typescript', 'c++', 'c#', 'ruby', 
-    'go', 'rust', 'swift', 'kotlin', 'php', 'scala', 'perl', 'r', 'matlab',
-    'dart', 'groovy', 'lua', 'haskell', 'clojure', 'elixir', 'erlang',
-    
-    # Web Frameworks
+# ====== SKILLS LIST ======
+SKILLS_LIST = [
+    'python', 'java', 'javascript', 'typescript', 'c++', 'c#', 'ruby',
     'react', 'angular', 'vue', 'django', 'flask', 'spring', 'node', 'express',
-    'rails', 'laravel', 'next.js', 'gatsby', 'nuxt', 'svelte', 'asp.net',
-    'fastapi', 'gin', 'echo', 'play framework', 'dropwizard', 'micronaut',
-    
-    # Databases
-    'sql', 'postgresql', 'mysql', 'mongodb', 'redis', 'cassandra',
-    'elasticsearch', 'dynamodb', 'firebase', 'oracle', 'mssql', 'sqlite',
-    'neo4j', 'influxdb', 'couchdb', 'riak', 'hbase',
-    
-    # Cloud & DevOps
-    'docker', 'kubernetes', 'aws', 'azure', 'gcp', 'terraform', 'ansible',
-    'jenkins', 'gitlab ci', 'github actions', 'circleci', 'travis ci',
-    'prometheus', 'grafana', 'elk stack', 'splunk', 'datadog', 'new relic',
-    'nginx', 'apache', 'linux', 'unix', 'bash', 'powershell',
-    
-    # Data Science & ML
-    'machine learning', 'deep learning', 'nlp', 'computer vision',
-    'data science', 'pandas', 'numpy', 'scikit-learn', 'tensorflow',
-    'pytorch', 'keras', 'opencv', 'spark', 'hadoop', 'airflow',
-    'mlflow', 'dvc', 'kubeflow', 'transformers', 'langchain',
-    
-    # Frontend
-    'html', 'css', 'sass', 'less', 'bootstrap', 'tailwind', 'material ui',
-    'chakra ui', 'ant design', 'styled components', 'webpack', 'vite',
-    'rollup', 'parcel', 'babel', 'eslint', 'prettier',
-    
-    # Backend & APIs
-    'rest api', 'graphql', 'microservices', 'websocket', 'oauth', 'jwt',
-    'grpc', 'soap', 'kafka', 'rabbitmq', 'api gateway', 'service mesh',
-    
-    # Testing
-    'unit testing', 'integration testing', 'e2e testing', 'selenium',
-    'junit', 'pytest', 'jest', 'mocha', 'cypress', 'playwright',
-    'testcafe', 'karate', 'postman', 'soapui', 'jmeter',
-    
-    # Mobile
-    'android', 'ios', 'flutter', 'react native', 'swift ui', 'kotlin multi',
-    'xamarin', 'cordova', 'ionic', 'native script',
-    
-    # Game Development
-    'unity', 'unreal', 'godot', 'cocos2d', 'photon', 'playfab'
-}
+    'sql', 'postgresql', 'mysql', 'mongodb', 'redis', 'docker', 'kubernetes',
+    'aws', 'azure', 'gcp', 'git', 'linux', 'html', 'css', 'machine learning',
+    'deep learning', 'nlp', 'data science', 'pandas', 'numpy', 'scikit-learn',
+    'tensorflow', 'pytorch', 'keras', 'tableau', 'power bi', 'excel',
+    'rest api', 'graphql', 'microservices', 'leadership', 'communication',
+    'teamwork', 'project management', 'agile', 'scrum', 'matplotlib',
+    'seaborn', 'plotly', 'streamlit', 'opencv', 'flask', 'fastapi'
+]
 
-# ====== CONCEPT SKILLS (Will have common test) ======
-CONCEPT_SKILLS = {
-    'data structures', 'algorithms', 'object-oriented programming',
-    'oop', 'dbms', 'computer networks', 'operating systems',
-    'system design', 'software engineering', 'design patterns',
-    'compiler design', 'computer architecture', 'cryptography',
-    'network security', 'cyber security', 'cloud computing',
-    'parallel computing', 'distributed systems', 'machine learning concepts'
-}
-
-# ====== SKILLS TO COMPLETELY REMOVE ======
-UNWANTED_SKILLS = {
-    # Tools
-    'git', 'github', 'jupyter', 'excel', 'powerpoint', 'word', 'outlook',
-    'vscode', 'pycharm', 'intellij', 'eclipse', 'notepad++', 'sublime text',
-    'postman', 'insomnia', 'swagger', 'tableau', 'power bi', 'looker',
-    'jira', 'confluence', 'slack', 'teams', 'trello', 'asana', 'notion',
-    
-    # Soft Skills
-    'communication', 'leadership', 'teamwork', 'project management',
-    'agile', 'scrum', 'kanban', 'waterfall', 'prince2', 'pmp',
-    'problem solving', 'critical thinking', 'public speaking',
-    'presentation', 'writing', 'negotiation', 'mentoring',
-    
-    # File/Data Formats
-    'file handling', 'xml', 'json', 'yaml', 'csv', 'toml',
-    
-    # Miscellaneous
-    'linux', 'bash', 'powershell', 'unix', 'vim', 'emacs',
-    'windows', 'macos', 'ios development', 'android development'
-}
-
-# ====== SKILLS FOR CONCEPT TEST ======
-CONCEPT_TEST_SKILLS = {
-    'data structures': 'Data Structures',
-    'algorithms': 'Algorithms',
-    'object-oriented programming': 'OOP',
-    'oop': 'OOP',
-    'dbms': 'DBMS',
-    'computer networks': 'Computer Networks',
-    'operating systems': 'Operating Systems',
-    'system design': 'System Design',
-    'software engineering': 'Software Engineering',
-    'design patterns': 'Design Patterns'
-}
-
-def filter_skills(raw_skills):
-    """Filter skills - remove unwanted, keep core, separate concepts"""
-    if not raw_skills:
-        return [], []
-    
-    core_found = set()
-    concept_found = set()
-    
-    for skill in raw_skills:
-        skill_lower = skill.lower().strip()
-        
-        # Skip unwanted
-        if skill_lower in UNWANTED_SKILLS:
-            continue
-        
-        # Check if it's a concept skill
-        if skill_lower in CONCEPT_SKILLS or skill_lower in CONCEPT_TEST_SKILLS:
-            concept_found.add(skill_lower)
-            continue
-        
-        # Check if it's a core skill
-        if skill_lower in CORE_SKILLS:
-            core_found.add(skill_lower)
-            # Also check for partial matches (e.g., "reactjs" should match "react")
-            for core in CORE_SKILLS:
-                if core in skill_lower and len(core) > 2:
-                    core_found.add(core)
-    
-    return list(core_found), list(concept_found)
+UNWANTED = [
+    'git', 'github', 'jupyter', 'vscode', 'pycharm', 'intellij', 'eclipse',
+    'postman', 'swagger', 'jira', 'confluence', 'slack', 'teams', 'outlook',
+    'word', 'powerpoint', 'excel'
+]
 
 def extract_name(text):
     lines = text.split('\n')
@@ -152,76 +44,90 @@ def extract_email(text):
 def extract_phone(text):
     phone_patterns = [
         r'\+?\d{1,3}[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,9}',
+        r'\d{10}',
         r'\d{3}[-.\s]?\d{3}[-.\s]?\d{4}',
-        r'\(\d{3}\)\s?\d{3}[-.\s]?\d{4}',
-        r'\+\d{1,3}\s?\d{10}',
-        r'\d{10}'
+        r'\(\d{3}\)\s?\d{3}[-.\s]?\d{4}'
     ]
     for pattern in phone_patterns:
         matches = re.findall(pattern, text)
         if matches:
             for match in matches:
-                if len(match.replace(' ', '').replace('-', '').replace('(', '').replace(')', '')) >= 10:
+                if len(re.sub(r'\D', '', match)) >= 10:
                     return match
     return None
 
 def extract_skills_from_section(text):
+    """Extract skills from SKILLS section"""
+    found_skills = set()
+    
+    # Get SKILLS section
+    skills_text = ""
     lines = text.split('\n')
-    in_skills_section = False
-    skills_text = []
+    in_skills = False
     
     for line in lines:
         line_stripped = line.strip()
         if re.search(r'^SKILLS\s*$|^TECHNICAL SKILLS\s*$', line_stripped, re.IGNORECASE):
-            in_skills_section = True
+            in_skills = True
             continue
-        if in_skills_section:
+        if in_skills:
             if re.search(r'^[A-Z][A-Z\s]+$', line_stripped) and len(line_stripped) > 5:
-                if line_stripped not in ['PROGRAMMING LANGUAGES:', 'PYTHON CONCEPTS:', 'LIBRARIES:', 'DATABASE:', 'TOOLS & PLATFORMS:']:
-                    break
+                break
             if line_stripped and not line_stripped.startswith('-'):
-                skills_text.append(line_stripped)
+                skills_text += line_stripped + " "
     
-    skills_section = ' '.join(skills_text)
-    
-    if not skills_section:
-        skills_pattern = r'SKILLS\s*\n([\s\S]*?)(?=\n[A-Z][A-Z\s]+:)'
-        match = re.search(skills_pattern, text, re.IGNORECASE)
+    if not skills_text:
+        pattern = r'SKILLS\s*\n([\s\S]*?)(?=\n[A-Z][A-Z\s]+:|$)'
+        match = re.search(pattern, text, re.IGNORECASE)
         if match:
-            skills_section = match.group(1)
+            skills_text = match.group(1)
     
-    if skills_section:
-        skills_section_lower = skills_section.lower()
-        found_skills = set()
-        
-        # Check each core skill
-        for skill in CORE_SKILLS:
-            if skill in skills_section_lower:
-                if skill == 'go' and 'golang' not in skills_section_lower:
-                    continue
-                found_skills.add(skill)
-        
-        # Check for concept skills
-        for skill in CONCEPT_TEST_SKILLS:
-            if skill in skills_section_lower:
-                found_skills.add(skill)
-        
-        return list(found_skills)
+   # print(f"📝 Skills text found: {skills_text[:200]}...")
     
-    return []
+    if skills_text:
+        skills_text_lower = skills_text.lower()
+        
+        # Method 1: Direct skill matching
+        for skill in SKILLS_LIST:
+            if skill in skills_text_lower:
+                if skill not in UNWANTED:
+                    found_skills.add(skill)
+                   # print(f"✅ Found skill: {skill}")
+        
+        # Method 2: Extract from colon-separated lists
+        colon_pattern = r'([A-Za-z\s]+):\s*([^,\n]+(?:,\s*[^,\n]+)*)'
+        matches = re.findall(colon_pattern, skills_text, re.IGNORECASE)
+        for match in matches:
+            skills_part = match[1].strip()
+            items = re.split(r'[,;•\n]', skills_part)
+            for item in items:
+                item = item.strip().lower()
+                if item in SKILLS_LIST and item not in UNWANTED:
+                    found_skills.add(item)
+                   # print(f"✅ Found skill from colon list: {item}")
+        
+        # Method 3: Extract from comma-separated lists
+        for line in skills_text.split('\n'):
+            line = line.strip()
+            if ':' in line:
+                continue
+            items = re.split(r'[,;•\n]', line)
+            for item in items:
+                item = item.strip().lower()
+                if item in SKILLS_LIST and item not in UNWANTED:
+                    found_skills.add(item)
+                    #print(f"✅ Found skill from comma list: {item}")
+    
+    return list(found_skills)
 
 def parse_resume(text):
-    raw_skills = extract_skills_from_section(text)
-    core_skills, concept_skills = filter_skills(raw_skills)
+    """Main function to parse resume"""
+    all_skills = extract_skills_from_section(text)
     
-    # Combine both types for database storage
-    all_skills = core_skills + concept_skills
     
     return {
         'name': extract_name(text),
         'email': extract_email(text),
         'phone': extract_phone(text),
-        'skills': all_skills,
-        'core_skills': core_skills,
-        'concept_skills': concept_skills
+        'skills': all_skills
     }

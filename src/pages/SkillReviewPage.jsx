@@ -23,6 +23,7 @@ function SkillReviewPage({ user, onLogout }) {
       setLoading(true)
       setError(null)
       const data = await getSkills(resumeId)
+      console.log('Skills fetched:', data)
       setSkills(data || [])
     } catch (err) {
       console.error('Error fetching skills:', err)
@@ -109,79 +110,81 @@ function SkillReviewPage({ user, onLogout }) {
             Review Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#667eea] to-[#764ba2]">Skills</span>
           </h1>
           <p className="text-gray-600 mt-4 max-w-2xl mx-auto">
-            Review the skills we extracted from your resume. Edit, delete, or add new skills as needed.
+            Review all the skills extracted from your resume. Edit, delete, or add new skills.
+          </p>
+          <p className="text-sm text-gray-500">
+            All skills will be rated. Important skills will be used for assessment.
           </p>
         </div>
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 px-6 py-4 rounded-xl mb-6">
             {error}
-            <button 
-              onClick={fetchSkills} 
-              className="ml-4 text-blue-600 hover:text-blue-800 underline font-medium"
-            >
+            <button onClick={fetchSkills} className="ml-4 text-blue-600 hover:text-blue-800 underline font-medium">
               Retry
             </button>
           </div>
         )}
 
+        {/* Skills List */}
         <div className="space-y-3">
-          {skills.map((skill) => (
-            <div 
-              key={skill.id}
-              className="bg-white rounded-xl shadow-sm hover:shadow-md transition border border-gray-100 p-4 flex items-center justify-between"
-            >
-              {editingId === skill.id ? (
-                <div className="flex-1 flex items-center space-x-3">
-                  <input
-                    type="text"
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    autoFocus
-                  />
-                  <button
-                    onClick={() => handleSaveEdit(skill.id)}
-                    className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={() => setEditingId(null)}
-                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <span className="text-lg font-medium text-gray-800">{skill.skill_name}</span>
-                  <div className="flex items-center space-x-2">
+          {skills.length === 0 ? (
+            <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+              <p className="text-gray-500">No skills found. Add your skills manually.</p>
+            </div>
+          ) : (
+            skills.map((skill) => (
+              <div 
+                key={skill.id}
+                className="bg-white rounded-xl shadow-sm hover:shadow-md transition border border-gray-100 p-4 flex items-center justify-between"
+              >
+                {editingId === skill.id ? (
+                  <div className="flex-1 flex items-center space-x-3">
+                    <input
+                      type="text"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      autoFocus
+                    />
                     <button
-                      onClick={() => handleEdit(skill)}
-                      className="text-blue-500 hover:text-blue-700 transition p-2"
+                      onClick={() => handleSaveEdit(skill.id)}
+                      className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition"
                     >
-                      ✏️
+                      Save
                     </button>
                     <button
-                      onClick={() => handleDelete(skill.id)}
-                      className="text-red-500 hover:text-red-700 transition p-2"
+                      onClick={() => setEditingId(null)}
+                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
                     >
-                      🗑️
+                      Cancel
                     </button>
                   </div>
-                </>
-              )}
-            </div>
-          ))}
+                ) : (
+                  <>
+                    <span className="text-lg font-medium text-gray-800">{skill.skill_name}</span>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => handleEdit(skill)}
+                        className="text-blue-500 hover:text-blue-700 transition p-2"
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(skill.id)}
+                        className="text-red-500 hover:text-red-700 transition p-2"
+                      >
+                        🗑️ Delete
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))
+          )}
         </div>
 
-        {skills.length === 0 && !showAddInput && !error && (
-          <div className="text-center mt-8">
-            <p className="text-gray-500">No skills found. Add your skills manually.</p>
-          </div>
-        )}
-
+        {/* Add Skill */}
         <div className="mt-6">
           {showAddInput ? (
             <div className="flex items-center space-x-3">
@@ -218,6 +221,7 @@ function SkillReviewPage({ user, onLogout }) {
           )}
         </div>
 
+        {/* Continue Button */}
         <div className="mt-10">
           <button
             onClick={handleContinue}

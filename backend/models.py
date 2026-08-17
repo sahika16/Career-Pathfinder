@@ -47,9 +47,9 @@ class Skill(Base):
     id = Column(Integer, primary_key=True, index=True)
     resume_id = Column(Integer, ForeignKey("resumes.id"))
     skill_name = Column(String(100), nullable=False)
-    rating = Column(Integer, nullable=True)
-    rating_level = Column(String(20), nullable=True)
-    is_core = Column(Boolean, default=True)
+    rating = Column(Integer, nullable=True)  # 1-10 rating
+    rating_level = Column(String(20), nullable=True)  # Basic, Intermediate, Advanced
+    is_core = Column(Boolean, default=True)  # True = Core, False = Other
     
     resume = relationship("Resume", back_populates="skills")
 
@@ -64,24 +64,23 @@ class ConceptSkill(Base):
     
     resume = relationship("Resume", back_populates="concept_skills")
 
-# ====== NEW: Assessment Models ======
+# ====== Assessment Models ======
 class Question(Base):
     __tablename__ = "questions"
     
     id = Column(Integer, primary_key=True, index=True)
     skill_name = Column(String(100), nullable=False)
-    difficulty = Column(String(20), nullable=False)  # Easy, Medium, Hard
+    difficulty = Column(String(20), nullable=False)
     question_text = Column(Text, nullable=False)
     option_a = Column(Text, nullable=False)
     option_b = Column(Text, nullable=False)
     option_c = Column(Text, nullable=False)
     option_d = Column(Text, nullable=False)
-    correct_answer = Column(String(1), nullable=False)  # A, B, C, D
+    correct_answer = Column(String(1), nullable=False)
     explanation = Column(Text, nullable=True)
     created_by = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    # Relationship with test results
     test_results = relationship("TestResult", back_populates="question")
 
 class TestResult(Base):
@@ -91,15 +90,13 @@ class TestResult(Base):
     resume_id = Column(Integer, ForeignKey("resumes.id"))
     skill_name = Column(String(100), nullable=False)
     question_id = Column(Integer, ForeignKey("questions.id"))
-    user_answer = Column(String(1), nullable=True)  # A, B, C, D
+    user_answer = Column(String(1), nullable=True)
     is_correct = Column(Boolean, default=False)
     test_date = Column(DateTime(timezone=True), server_default=func.now())
     
-    # Relationships
     resume = relationship("Resume", back_populates="test_results")
     question = relationship("Question", back_populates="test_results")
 
-# ====== NEW: Test Summary Model ======
 class TestSummary(Base):
     __tablename__ = "test_summaries"
     
@@ -109,7 +106,7 @@ class TestSummary(Base):
     total_questions = Column(Integer, nullable=False)
     correct_answers = Column(Integer, nullable=False)
     score_percentage = Column(Float, nullable=False)
-    result_status = Column(String(20), nullable=False)  # Passed, Failed
+    result_status = Column(String(20), nullable=False)
     test_date = Column(DateTime(timezone=True), server_default=func.now())
     
     resume = relationship("Resume")

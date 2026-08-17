@@ -14,7 +14,10 @@ from datetime import datetime, timedelta
 from assessment import (
     generate_test_for_skill, 
     evaluate_test_submission, 
-    get_test_results
+    get_test_results,
+    get_available_skills_for_assessment,
+    has_test_been_taken,
+    get_completed_skills
 )
 
 # ====== ENVIRONMENT VARIABLES ======
@@ -231,7 +234,7 @@ def send_otp_email(email: str, otp: str, name: str = "Student"):
         print(f"❌ Email Error: {str(e)}")
         return False, str(e)
 
-# ====== Upload Resume ======
+# ====== UPLOAD RESUME ======
 @app.post("/api/upload-resume")
 async def upload_resume(
     file: UploadFile = File(...),
@@ -269,22 +272,16 @@ async def upload_resume(
         db.add(resume)
         db.flush()
         
-        core_skills = parsed_data.get('core_skills', [])
-        for skill_name in core_skills:
+        all_skills = parsed_data.get('skills', [])
+        print(f"✅ Found {len(all_skills)} skills: {all_skills}")
+        
+        for skill_name in all_skills:
             skill = models.Skill(
                 resume_id=resume.id,
                 skill_name=skill_name,
                 is_core=True
             )
             db.add(skill)
-        
-        concept_skills = parsed_data.get('concept_skills', [])
-        for concept_name in concept_skills:
-            concept = models.ConceptSkill(
-                resume_id=resume.id,
-                concept_name=concept_name
-            )
-            db.add(concept)
         
         db.commit()
         db.refresh(resume)
@@ -296,15 +293,14 @@ async def upload_resume(
             "name": resume.name,
             "email": resume.email,
             "phone": resume.phone,
-            "core_skills": core_skills,
-            "concept_skills": concept_skills
+            "skills": all_skills
         }
         
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
-# ====== Get All Resumes ======
+# ====== GET ALL RESUMES ======
 @app.get("/api/resumes")
 def get_all_resumes(db: Session = Depends(get_db)):
     resumes = db.query(models.Resume).order_by(models.Resume.uploaded_at.desc()).all()
@@ -326,7 +322,7 @@ def get_all_resumes(db: Session = Depends(get_db)):
         })
     return result
 
-# ====== Get Skills for a Resume ======
+# ====== GET SKILLS FOR A RESUME ======
 @app.get("/api/skills/{resume_id}")
 def get_skills(resume_id: int, db: Session = Depends(get_db)):
     skills = db.query(models.Skill).filter(models.Skill.resume_id == resume_id).all()
@@ -337,12 +333,12 @@ def get_skills(resume_id: int, db: Session = Depends(get_db)):
             "skill_name": s.skill_name,
             "rating": s.rating,
             "rating_level": s.rating_level,
-            "is_core": s.is_core
+            "is_core": s.is_core if s.is_core is not None else True
         }
         for s in skills
     ]
 
-# ====== Get Concept Skills for a Resume ======
+# ====== GET CONCEPT SKILLS ======
 @app.get("/api/concept-skills/{resume_id}")
 def get_concept_skills(resume_id: int, db: Session = Depends(get_db)):
     concepts = db.query(models.ConceptSkill).filter(models.ConceptSkill.resume_id == resume_id).all()
@@ -357,7 +353,7 @@ def get_concept_skills(resume_id: int, db: Session = Depends(get_db)):
         for c in concepts
     ]
 
-# ====== Update a Skill ======
+# ====== UPDATE A SKILL ======
 @app.put("/api/skills/{skill_id}")
 def update_skill(skill_id: int, skill_data: SkillUpdate, db: Session = Depends(get_db)):
     skill = db.query(models.Skill).filter(models.Skill.id == skill_id).first()
@@ -383,10 +379,11 @@ def update_skill(skill_id: int, skill_data: SkillUpdate, db: Session = Depends(g
         "id": skill.id,
         "skill_name": skill.skill_name,
         "rating": skill.rating,
-        "rating_level": skill.rating_level
+        "rating_level": skill.rating_level,
+        "is_core": skill.is_core
     }
 
-# ====== Add a Skill ======
+# ====== ADD A SKILL ======
 @app.post("/api/skills/{resume_id}")
 def add_skill(resume_id: int, skill_data: SkillCreate, db: Session = Depends(get_db)):
     resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
@@ -403,7 +400,8 @@ def add_skill(resume_id: int, skill_data: SkillCreate, db: Session = Depends(get
     
     new_skill = models.Skill(
         resume_id=resume_id,
-        skill_name=skill_data.skill_name
+        skill_name=skill_data.skill_name,
+        is_core=True
     )
     
     db.add(new_skill)
@@ -415,7 +413,7 @@ def add_skill(resume_id: int, skill_data: SkillCreate, db: Session = Depends(get
         "skill_name": new_skill.skill_name
     }
 
-# ====== Delete a Skill ======
+# ====== DELETE A SKILL ======
 @app.delete("/api/skills/{skill_id}")
 def delete_skill(skill_id: int, db: Session = Depends(get_db)):
     skill = db.query(models.Skill).filter(models.Skill.id == skill_id).first()
@@ -426,7 +424,7 @@ def delete_skill(skill_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Skill deleted"}
 
-# ====== Update All Ratings ======
+# ====== UPDATE ALL RATINGS ======
 @app.put("/api/skills/{resume_id}/ratings")
 def update_ratings(resume_id: int, ratings: List[RatingUpdate], db: Session = Depends(get_db)):
     for rating_data in ratings:
@@ -446,7 +444,7 @@ def update_ratings(resume_id: int, ratings: List[RatingUpdate], db: Session = De
     db.commit()
     return {"message": "Ratings updated"}
 
-# ====== Update Concept Skill Rating ======
+# ====== UPDATE CONCEPT SKILL RATING ======
 @app.put("/api/concept-skills/{concept_id}")
 def update_concept_skill(concept_id: int, skill_data: SkillUpdate, db: Session = Depends(get_db)):
     concept = db.query(models.ConceptSkill).filter(models.ConceptSkill.id == concept_id).first()
@@ -472,7 +470,7 @@ def update_concept_skill(concept_id: int, skill_data: SkillUpdate, db: Session =
         "rating_level": concept.rating_level
     }
 
-# ====== Update All Concept Ratings ======
+# ====== UPDATE ALL CONCEPT RATINGS ======
 @app.put("/api/concept-skills/{resume_id}/ratings")
 def update_concept_ratings(resume_id: int, ratings: List[RatingUpdate], db: Session = Depends(get_db)):
     for rating_data in ratings:
@@ -492,7 +490,7 @@ def update_concept_ratings(resume_id: int, ratings: List[RatingUpdate], db: Sess
     db.commit()
     return {"message": "Concept ratings updated"}
 
-# ====== Update Resume Status ======
+# ====== UPDATE RESUME STATUS ======
 @app.put("/api/resume/{resume_id}/status")
 def update_resume_status(resume_id: int, status_data: StatusUpdate, db: Session = Depends(get_db)):
     resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
@@ -513,7 +511,7 @@ def update_resume_status(resume_id: int, status_data: StatusUpdate, db: Session 
     db.commit()
     return {"message": "Status updated"}
 
-# ====== STUDENT OTP Login Endpoints ======
+# ====== STUDENT OTP LOGIN ENDPOINTS ======
 
 @app.post("/api/login/send-otp")
 def send_login_otp(login_data: dict, db: Session = Depends(get_db)):
@@ -726,7 +724,7 @@ def login_trainer(login_data: TrainerLogin, db: Session = Depends(get_db)):
         "role": "trainer"
     }
 
-# ====== ADMIN LOGIN (from .env) ======
+# ====== ADMIN LOGIN ======
 @app.post("/api/login/admin")
 def login_admin(login_data: AdminLogin):
     if login_data.email != ADMIN_EMAIL:
@@ -805,6 +803,7 @@ def get_all_trainers(db: Session = Depends(get_db)):
         for t in trainers
     ]
 
+# ====== ADMIN: Get All Students ======
 @app.get("/api/admin/students")
 def get_all_students(db: Session = Depends(get_db)):
     students = db.query(models.Resume).filter(models.Resume.role == 'student').all()
@@ -834,11 +833,11 @@ def generate_test(resume_id: int, skill_name: str, db: Session = Depends(get_db)
     # Get the skill rating
     skill = db.query(models.Skill).filter(
         models.Skill.resume_id == resume_id,
-        models.Skill.skill_name == skill_name
+        models.Skill.skill_name.ilike(skill_name)
     ).first()
     
     if not skill:
-        raise HTTPException(status_code=404, detail="Skill not found")
+        raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
     
     if skill.rating is None:
         raise HTTPException(status_code=400, detail="Skill not rated yet")
@@ -851,13 +850,23 @@ def generate_test(resume_id: int, skill_name: str, db: Session = Depends(get_db)
     else:
         difficulty = "Hard"
     
+    # Check if test already taken
+    from assessment import has_test_been_taken
+    if has_test_been_taken(resume_id, skill_name, db):
+        return {
+            "skill": skill_name,
+            "difficulty": difficulty,
+            "rating": skill.rating,
+            "already_taken": True,
+            "message": "You have already completed this test."
+        }
+    
     # Generate test questions
     questions = generate_test_for_skill(skill_name, difficulty, db)
     
     if not questions:
         raise HTTPException(status_code=404, detail=f"No questions found for {skill_name} with {difficulty} difficulty")
     
-    # Return questions (without correct answer for student)
     return {
         "skill": skill_name,
         "difficulty": difficulty,
@@ -878,22 +887,19 @@ def generate_test(resume_id: int, skill_name: str, db: Session = Depends(get_db)
 
 @app.post("/api/test/submit")
 def submit_test(submission_data: dict, db: Session = Depends(get_db)):
-    """Submit test answers and evaluate"""
     resume_id = submission_data.get('resume_id')
     skill_name = submission_data.get('skill_name')
-    answers = submission_data.get('answers', {})  # {question_id: user_answer}
+    answers = submission_data.get('answers', {})
     
     if not resume_id or not skill_name:
         raise HTTPException(status_code=400, detail="resume_id and skill_name are required")
     
-    # Evaluate answers
     results = evaluate_test_submission(resume_id, skill_name, answers, db)
     
     return results
 
 @app.get("/api/test/results/{resume_id}/{skill_name}")
 def get_test_results_by_skill(resume_id: int, skill_name: str, db: Session = Depends(get_db)):
-    """Get test results for a specific skill"""
     summary = db.query(models.TestSummary).filter(
         models.TestSummary.resume_id == resume_id,
         models.TestSummary.skill_name == skill_name
@@ -902,7 +908,6 @@ def get_test_results_by_skill(resume_id: int, skill_name: str, db: Session = Dep
     if not summary:
         raise HTTPException(status_code=404, detail="No test results found for this skill")
     
-    # Get individual question results
     results = db.query(models.TestResult).filter(
         models.TestResult.resume_id == resume_id,
         models.TestResult.skill_name == skill_name
@@ -929,7 +934,6 @@ def get_test_results_by_skill(resume_id: int, skill_name: str, db: Session = Dep
 
 @app.get("/api/test/all-results/{resume_id}")
 def get_all_test_results(resume_id: int, db: Session = Depends(get_db)):
-    """Get all test results for a student"""
     results = db.query(models.TestSummary).filter(
         models.TestSummary.resume_id == resume_id
     ).all()
@@ -950,7 +954,6 @@ def get_all_test_results(resume_id: int, db: Session = Depends(get_db)):
 
 @app.post("/api/admin/question")
 def add_question(question_data: dict, db: Session = Depends(get_db)):
-    """Admin adds a new question"""
     new_question = models.Question(
         skill_name=question_data.get('skill_name'),
         difficulty=question_data.get('difficulty'),
@@ -971,7 +974,6 @@ def add_question(question_data: dict, db: Session = Depends(get_db)):
 
 @app.get("/api/admin/questions")
 def get_all_questions(db: Session = Depends(get_db)):
-    """Admin gets all questions"""
     questions = db.query(models.Question).all()
     
     return [
@@ -992,7 +994,6 @@ def get_all_questions(db: Session = Depends(get_db)):
 
 @app.get("/api/admin/questions/{skill_name}")
 def get_questions_by_skill(skill_name: str, db: Session = Depends(get_db)):
-    """Admin gets questions by skill"""
     questions = db.query(models.Question).filter(
         models.Question.skill_name == skill_name
     ).all()
@@ -1017,7 +1018,6 @@ def get_questions_by_skill(skill_name: str, db: Session = Depends(get_db)):
 
 @app.put("/api/admin/question/{question_id}")
 def update_question(question_id: int, question_data: dict, db: Session = Depends(get_db)):
-    """Admin updates a question"""
     question = db.query(models.Question).filter(models.Question.id == question_id).first()
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
@@ -1033,7 +1033,6 @@ def update_question(question_id: int, question_data: dict, db: Session = Depends
 
 @app.delete("/api/admin/question/{question_id}")
 def delete_question(question_id: int, db: Session = Depends(get_db)):
-    """Admin deletes a question"""
     question = db.query(models.Question).filter(models.Question.id == question_id).first()
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
@@ -1045,36 +1044,21 @@ def delete_question(question_id: int, db: Session = Depends(get_db)):
 
 @app.get("/api/admin/skills-list")
 def get_all_skill_names(db: Session = Depends(get_db)):
-    """Get all unique skill names from questions"""
     skills = db.query(models.Question.skill_name).distinct().all()
     return {"skills": [s[0] for s in skills]}
 
 @app.get("/api/assessment/skills/{resume_id}")
 def get_assessment_skills(resume_id: int, db: Session = Depends(get_db)):
-    """Get all skills with ratings for assessment"""
-    skills = db.query(models.Skill).filter(
-        models.Skill.resume_id == resume_id,
-        models.Skill.rating.isnot(None)
-    ).all()
-    
-    return [
-        {
-            "id": s.id,
-            "skill_name": s.skill_name,
-            "rating": s.rating,
-            "rating_level": s.rating_level
-        }
-        for s in skills
-    ]
+    """Get all skills with ratings AND questions for assessment"""
+    from assessment import get_available_skills_for_assessment
+    return get_available_skills_for_assessment(resume_id, db)
 
 @app.post("/api/admin/skill")
-def add_skill(skill_data: dict, db: Session = Depends(get_db)):
-    """Admin adds a new skill (creates a placeholder question)"""
+def add_admin_skill(skill_data: dict, db: Session = Depends(get_db)):
     skill_name = skill_data.get('skill_name')
     if not skill_name:
         raise HTTPException(status_code=400, detail="Skill name is required")
     
-    # Check if skill already exists
     existing = db.query(models.Question).filter(
         models.Question.skill_name == skill_name
     ).first()
@@ -1082,7 +1066,6 @@ def add_skill(skill_data: dict, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="Skill already exists")
     
-    # Create a placeholder question to add the skill
     new_question = models.Question(
         skill_name=skill_name,
         difficulty='Medium',
@@ -1100,6 +1083,13 @@ def add_skill(skill_data: dict, db: Session = Depends(get_db)):
     db.refresh(new_question)
     
     return {"message": f"Skill '{skill_name}' added successfully", "id": new_question.id}
+
+@app.get("/api/test/completed/{resume_id}")
+def get_completed_skills(resume_id: int, db: Session = Depends(get_db)):
+    """Get list of skills already completed by student"""
+    from assessment import get_completed_skills
+    completed = get_completed_skills(resume_id, db)
+    return {"completed": completed}
 
 @app.get("/api/health")
 def health_check():

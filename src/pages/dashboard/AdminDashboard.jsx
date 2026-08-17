@@ -73,7 +73,7 @@ function AdminDashboard({ user, onLogout }) {
       <div className="max-w-7xl mx-auto pt-28 px-6 pb-12">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-          <p className="text-gray-500 mt-1">Welcome back, {user?.name || 'Admin'}!</p>
+          <p className="text-gray-500 mt-1">Welcome, {user?.name || 'Admin'}!</p>
         </div>
 
         {error && (

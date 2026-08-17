@@ -8,7 +8,7 @@ function AssessmentPage({ user, onLogout }) {
   const navigate = useNavigate()
   
   const [questions, setQuestions] = useState([])
-  const [currentIndex, setCurrentIndex] = useState(0)
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [answers, setAnswers] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -17,7 +17,9 @@ function AssessmentPage({ user, onLogout }) {
   const [testInfo, setTestInfo] = useState(null)
 
   useEffect(() => {
-    fetchTest()
+    if (resumeId && skillName) {
+      fetchTest()
+    }
   }, [resumeId, skillName])
 
   useEffect(() => {
@@ -39,19 +41,34 @@ function AssessmentPage({ user, onLogout }) {
   const fetchTest = async () => {
     try {
       setLoading(true)
+      setError(null)
+      
       const data = await generateTest(resumeId, skillName)
+      
+      if (data.already_taken) {
+        setError(`You have already completed the test for ${skillName}!`)
+        setLoading(false)
+        return
+      }
+      
+      if (!data.questions || data.questions.length === 0) {
+        setError(`No questions available for ${skillName}. Please contact admin to add questions.`)
+        setLoading(false)
+        return
+      }
+      
       setQuestions(data.questions || [])
       setTestInfo({
-        skill: data.skill,
-        difficulty: data.difficulty,
-        rating: data.rating,
-        total: data.total_questions
+        skill: data.skill || skillName,
+        difficulty: data.difficulty || 'Medium',
+        rating: data.rating || 5,
+        total: data.total_questions || data.questions.length
       })
-      // 1.5 minutes per question
-      setTimeRemaining(Math.ceil(data.total_questions * 1.5 * 60))
+      setTimeRemaining(Math.ceil((data.total_questions || data.questions.length) * 1.5 * 60))
+      setLoading(false)
     } catch (err) {
+      console.error('Error fetching test:', err)
       setError(err.response?.data?.detail || 'Failed to load test. Please try again.')
-    } finally {
       setLoading(false)
     }
   }
@@ -63,26 +80,26 @@ function AssessmentPage({ user, onLogout }) {
     }))
   }
 
-  const handleNext = () => {
-    if (currentIndex < questions.length - 1) {
-      setCurrentIndex(prev => prev + 1)
+  const handleNextQuestion = () => {
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1)
     }
   }
 
-  const handlePrevious = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex(prev => prev - 1)
+  const handlePreviousQuestion = () => {
+    if (currentQuestionIndex > 0) {
+      setCurrentQuestionIndex(prev => prev - 1)
     }
   }
 
-  const handleSubmit = async () => {
-    if (window.confirm('Are you sure you want to submit the test? You cannot change answers after submission.')) {
+  const handleSubmitTest = async () => {
+    if (window.confirm('Are you sure you want to submit this test?')) {
       await submitTestHandler()
     }
   }
 
   const handleAutoSubmit = async () => {
-    alert('⏰ Time is up! Your test will be submitted automatically.')
+    alert('Time is up! Your test will be submitted automatically.')
     await submitTestHandler()
   }
 
@@ -95,11 +112,23 @@ function AssessmentPage({ user, onLogout }) {
         answers: answers
       }
       const results = await submitTest(submissionData)
+      
+      if (results.already_taken) {
+        alert('You have already completed this test!')
+        navigate('/student-dashboard')
+        return
+      }
+      
+      alert(`Test completed! Score: ${results.score_percentage.toFixed(1)}% - ${results.result_status}`)
       navigate(`/results/${resumeId}/${skillName}`, { state: { results } })
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to submit test. Please try again.')
+      setError(err.response?.data?.detail || 'Failed to submit test.')
       setSubmitting(false)
     }
+  }
+
+  const handleBackToDashboard = () => {
+    navigate('/student-dashboard')
   }
 
   const formatTime = (seconds) => {
@@ -128,14 +157,23 @@ function AssessmentPage({ user, onLogout }) {
         <Navbar user={user} onLogout={onLogout} />
         <div className="max-w-2xl mx-auto pt-32 px-6 text-center">
           <div className="bg-red-50 border border-red-200 text-red-600 px-6 py-4 rounded-xl">
-            {error}
+            <p className="font-bold">{error}</p>
+            <p className="text-sm mt-2">Skill: {skillName}</p>
           </div>
-          <button
-            onClick={fetchTest}
-            className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
-          >
-            Retry
-          </button>
+          <div className="mt-4 flex flex-wrap gap-2 justify-center">
+            <button
+              onClick={fetchTest}
+              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
+            >
+              Retry
+            </button>
+            <button
+              onClick={handleBackToDashboard}
+              className="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300 transition"
+            >
+              Dashboard
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -147,9 +185,9 @@ function AssessmentPage({ user, onLogout }) {
         <Navbar user={user} onLogout={onLogout} />
         <div className="max-w-2xl mx-auto pt-32 px-6 text-center">
           <h2 className="text-2xl font-bold text-gray-700">No questions available</h2>
-          <p className="text-gray-500 mt-2">Please contact admin to add questions for this skill.</p>
+          <p className="text-gray-500 mt-2">Please contact admin to add questions for {skillName}.</p>
           <button
-            onClick={() => navigate('/student-dashboard')}
+            onClick={handleBackToDashboard}
             className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
           >
             Back to Dashboard
@@ -159,21 +197,35 @@ function AssessmentPage({ user, onLogout }) {
     )
   }
 
-  const currentQuestion = questions[currentIndex]
-  const isAnswered = answers[currentQuestion?.id] !== undefined
+  const currentQuestion = questions[currentQuestionIndex]
   const answeredCount = Object.keys(answers).length
+  const isTestComplete = answeredCount === questions.length
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <Navbar user={user} onLogout={onLogout} />
       
       <div className="max-w-3xl mx-auto pt-24 pb-12 px-6">
-        {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">{testInfo?.skill}</h1>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleBackToDashboard}
+                className="text-gray-500 hover:text-gray-700 text-sm"
+              >
+                ← Dashboard
+              </button>
+              <h1 className="text-2xl font-bold text-gray-800">{testInfo?.skill}</h1>
+              <span className={`text-xs px-2 py-1 rounded-full ${
+                testInfo?.difficulty === 'Easy' ? 'bg-green-100 text-green-700' :
+                testInfo?.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                'bg-red-100 text-red-700'
+              }`}>
+                {testInfo?.difficulty}
+              </span>
+            </div>
             <p className="text-sm text-gray-500">
-              Difficulty: {testInfo?.difficulty} • Rating: {testInfo?.rating}/10
+              Rating: {testInfo?.rating}/10 • Question {currentQuestionIndex + 1} of {questions.length}
             </p>
           </div>
           <div className="text-right">
@@ -186,7 +238,6 @@ function AssessmentPage({ user, onLogout }) {
           </div>
         </div>
 
-        {/* Progress Bar */}
         <div className="w-full h-2 bg-gray-200 rounded-full mb-6">
           <div 
             className="h-2 bg-blue-600 rounded-full transition-all"
@@ -194,11 +245,10 @@ function AssessmentPage({ user, onLogout }) {
           />
         </div>
 
-        {/* Question Card */}
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
           <div className="mb-4">
             <span className="text-sm text-gray-500">
-              Question {currentIndex + 1} of {questions.length}
+              Question {currentQuestionIndex + 1} of {questions.length}
             </span>
           </div>
           
@@ -223,13 +273,12 @@ function AssessmentPage({ user, onLogout }) {
           </div>
         </div>
 
-        {/* Navigation Buttons */}
         <div className="mt-6 flex justify-between">
           <button
-            onClick={handlePrevious}
-            disabled={currentIndex === 0}
+            onClick={handlePreviousQuestion}
+            disabled={currentQuestionIndex === 0}
             className={`px-6 py-2 rounded-lg ${
-              currentIndex === 0
+              currentQuestionIndex === 0
                 ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             } transition`}
@@ -237,35 +286,39 @@ function AssessmentPage({ user, onLogout }) {
             ← Previous
           </button>
           
-          <button
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="bg-gradient-to-r from-green-500 to-emerald-500 text-white px-8 py-2 rounded-lg hover:shadow-lg transition font-semibold disabled:opacity-50"
-          >
-            {submitting ? 'Submitting...' : 'Submit Test'}
-          </button>
-
-          <button
-            onClick={handleNext}
-            disabled={currentIndex === questions.length - 1}
-            className={`px-6 py-2 rounded-lg ${
-              currentIndex === questions.length - 1
-                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
-            } transition`}
-          >
-            Next →
-          </button>
+          {currentQuestionIndex === questions.length - 1 ? (
+            <button
+              onClick={handleSubmitTest}
+              disabled={submitting || !isTestComplete}
+              className={`bg-gradient-to-r from-green-500 to-emerald-500 text-white px-8 py-2 rounded-lg hover:shadow-lg transition font-semibold ${
+                !isTestComplete ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+            >
+              {submitting ? 'Submitting...' : 'Submit Test'}
+            </button>
+          ) : (
+            <button
+              onClick={handleNextQuestion}
+              className="bg-blue-600 text-white px-8 py-2 rounded-lg hover:bg-blue-700 transition"
+            >
+              Next →
+            </button>
+          )}
         </div>
 
-        {/* Question Navigator */}
+        {!isTestComplete && (
+          <p className="text-center text-sm text-gray-500 mt-2">
+            Please answer all questions before submitting.
+          </p>
+        )}
+
         <div className="mt-6 flex flex-wrap gap-2 justify-center">
           {questions.map((q, index) => (
             <button
               key={q.id}
-              onClick={() => setCurrentIndex(index)}
+              onClick={() => setCurrentQuestionIndex(index)}
               className={`w-8 h-8 rounded-full text-sm font-medium transition ${
-                index === currentIndex
+                index === currentQuestionIndex
                   ? 'bg-blue-600 text-white'
                   : answers[q.id] !== undefined
                     ? 'bg-green-500 text-white'

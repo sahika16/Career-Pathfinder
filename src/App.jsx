@@ -21,7 +21,12 @@ import AdminSkills from './pages/AdminSkills'
 import AdminStudents from './pages/AdminStudents'
 import AdminTrainers from './pages/AdminTrainers'
 
+// ====== SESSION TIMEOUT ======
 const SESSION_TIMEOUT = 3 * 60 * 60 * 1000 // 3 hours
+
+// ====== STORAGE KEYS ======
+const USER_STORAGE_KEY = 'careerUser'
+const LOGIN_TIME_KEY = 'careerLoginTime'
 
 function AppContent() {
   const [user, setUser] = useState(null)
@@ -33,15 +38,16 @@ function AppContent() {
   }, [])
 
   const checkSession = () => {
-    const storedUser = localStorage.getItem('careerUser')
-    const loginTime = localStorage.getItem('careerLoginTime')
+    // Use sessionStorage instead of localStorage
+    const storedUser = sessionStorage.getItem(USER_STORAGE_KEY)
+    const loginTime = sessionStorage.getItem(LOGIN_TIME_KEY)
     
     if (storedUser && loginTime) {
       const elapsed = Date.now() - parseInt(loginTime)
       
       if (elapsed > SESSION_TIMEOUT) {
-        localStorage.removeItem('careerUser')
-        localStorage.removeItem('careerLoginTime')
+        sessionStorage.removeItem(USER_STORAGE_KEY)
+        sessionStorage.removeItem(LOGIN_TIME_KEY)
         setUser(null)
         navigate('/login/student')
         setLoading(false)
@@ -52,8 +58,8 @@ function AppContent() {
         const userData = JSON.parse(storedUser)
         setUser(userData)
       } catch (e) {
-        localStorage.removeItem('careerUser')
-        localStorage.removeItem('careerLoginTime')
+        sessionStorage.removeItem(USER_STORAGE_KEY)
+        sessionStorage.removeItem(LOGIN_TIME_KEY)
       }
     }
     setLoading(false)
@@ -61,8 +67,9 @@ function AppContent() {
 
   const handleLogin = (userData) => {
     setUser(userData)
-    localStorage.setItem('careerUser', JSON.stringify(userData))
-    localStorage.setItem('careerLoginTime', Date.now().toString())
+    // Use sessionStorage (separate per tab)
+    sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData))
+    sessionStorage.setItem(LOGIN_TIME_KEY, Date.now().toString())
     
     if (userData.role === 'student') {
       navigate('/student-dashboard')
@@ -77,8 +84,8 @@ function AppContent() {
 
   const handleLogout = () => {
     setUser(null)
-    localStorage.removeItem('careerUser')
-    localStorage.removeItem('careerLoginTime')
+    sessionStorage.removeItem(USER_STORAGE_KEY)
+    sessionStorage.removeItem(LOGIN_TIME_KEY)
     navigate('/')
   }
 
@@ -108,7 +115,7 @@ function AppContent() {
       <Route path="/skill-review/:resumeId" element={<SkillReviewPage user={user} onLogout={handleLogout} />} />
       <Route path="/skill-rating/:resumeId" element={<SkillRatingPage user={user} onLogout={handleLogout} />} />
       
-      {/* Assessment Routes */}
+      {/* Assessment Routes - with skillName */}
       <Route path="/assessment/:resumeId/:skillName" element={
         <ProtectedRoute user={user} allowedRoles={['student']}>
           <AssessmentPage user={user} onLogout={handleLogout} />
