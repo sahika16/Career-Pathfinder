@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
-import { getAllSkillNames, getAllQuestions, addQuestion, updateQuestion, deleteQuestion, addSkill } from '../utils/api'
+import { getAllSkillNames, getAllQuestions, addQuestion, updateQuestion, deleteQuestion, addAdminSkill } from '../utils/api'
 
 function AdminSkills({ user, onLogout }) {
   const navigate = useNavigate()
@@ -75,25 +75,25 @@ function AdminSkills({ user, onLogout }) {
 
   const handleAddSkill = async () => {
     if (!newSkillName.trim()) {
-      alert('Please enter a skill name')
+      setError('Please enter a skill name')
       return
     }
     try {
-      await addSkill(newSkillName.trim())
+      await addAdminSkill(newSkillName.trim())
       setSuccessMessage(`Skill "${newSkillName}" added successfully!`)
       setShowAddSkill(false)
       setNewSkillName('')
       await fetchData()
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to add skill.')
+      setError(err.response?.data?.detail || 'Failed to add skill.')
     }
   }
 
   const handleAddQuestion = async (e) => {
     e.preventDefault()
     if (!questionForm.question_text.trim()) {
-      alert('Please enter question text')
+      setError('Please enter question text')
       return
     }
     try {
@@ -120,7 +120,7 @@ function AdminSkills({ user, onLogout }) {
       await fetchData()
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (err) {
-      alert('Failed to save question.')
+      setError('Failed to save question.')
     }
   }
 
@@ -141,19 +141,16 @@ function AdminSkills({ user, onLogout }) {
   }
 
   const handleDeleteQuestion = async (id) => {
-    if (window.confirm('Delete this question?')) {
-      try {
-        await deleteQuestion(id)
-        setSuccessMessage('Question deleted!')
-        await fetchData()
-        setTimeout(() => setSuccessMessage(null), 3000)
-      } catch (err) {
-        alert('Failed to delete question.')
-      }
+    try {
+      await deleteQuestion(id)
+      setSuccessMessage('Question deleted!')
+      await fetchData()
+      setTimeout(() => setSuccessMessage(null), 3000)
+    } catch (err) {
+      setError('Failed to delete question.')
     }
   }
 
-  // ====== FIX: Back button with correct navigation ======
   const goBackToDashboard = () => {
     navigate('/admin-dashboard')
   }
@@ -182,7 +179,6 @@ function AdminSkills({ user, onLogout }) {
             <h1 className="text-2xl font-bold text-gray-900">Skills Management</h1>
             <p className="text-gray-500">View all skills and manage their questions</p>
           </div>
-          {/* ====== FIX: Working back button ====== */}
           <button
             onClick={goBackToDashboard}
             className="flex items-center gap-2 px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition font-medium"

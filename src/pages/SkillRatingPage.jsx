@@ -52,14 +52,10 @@ function SkillRatingPage({ user, onLogout }) {
       
       await updateResumeStatus(resumeId, {
         skills_rated: true,
-        current_step: 'assessment'
+        current_step: 'login'
       })
       
-      alert('✅ Ratings saved successfully!')
-      
-      // ====== DIRECTLY GO TO ASSESSMENT ======
-      // This ensures user goes to assessment right after rating
-      navigate(`/assessment/${resumeId}`, { replace: true })
+      navigate('/login/student')
       
     } catch (err) {
       setError('Failed to save ratings. Please try again.')
@@ -176,9 +172,9 @@ function SkillRatingPage({ user, onLogout }) {
           <button
             onClick={handleSaveRatings}
             disabled={saving}
-            className="flex-2 bg-gradient-to-r from-[#f093fb] to-[#f5576c] text-white py-4 rounded-xl hover:shadow-lg transition font-bold text-lg disabled:opacity-50"
+            className="flex-1 bg-gradient-to-r from-[#f093fb] to-[#f5576c] text-white py-4 rounded-xl hover:shadow-lg transition font-bold text-lg disabled:opacity-50"
           >
-            {saving ? 'Saving...' : 'Save & Continue'}
+            {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
       </div>

@@ -29,7 +29,7 @@ function AdminLoginPage({ onLogin }) {
       
       const data = response.data
       
-      alert(`Welcome, ${data.name}!`)
+      //alert(`Welcome, ${data.name}!`)
       
       const userData = {
         id: data.id || 1,

@@ -825,7 +825,7 @@ def get_all_students(db: Session = Depends(get_db)):
 
 @app.get("/api/test/generate/{resume_id}/{skill_name}")
 def generate_test(resume_id: int, skill_name: str, db: Session = Depends(get_db)):
-    """Generate a test for a specific skill"""
+    """Generate a test for a specific skill - NO DUPLICATES"""
     resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
@@ -867,11 +867,20 @@ def generate_test(resume_id: int, skill_name: str, db: Session = Depends(get_db)
     if not questions:
         raise HTTPException(status_code=404, detail=f"No questions found for {skill_name} with {difficulty} difficulty")
     
+    # ====== REMOVE DUPLICATES ======
+    # Remove duplicates by id
+    seen = set()
+    unique_questions = []
+    for q in questions:
+        if q.id not in seen:
+            seen.add(q.id)
+            unique_questions.append(q)
+    
     return {
         "skill": skill_name,
         "difficulty": difficulty,
         "rating": skill.rating,
-        "total_questions": len(questions),
+        "total_questions": len(unique_questions),
         "questions": [
             {
                 "id": q.id,
@@ -881,7 +890,7 @@ def generate_test(resume_id: int, skill_name: str, db: Session = Depends(get_db)
                 "option_c": q.option_c,
                 "option_d": q.option_d
             }
-            for q in questions
+            for q in unique_questions
         ]
     }
 
@@ -913,6 +922,40 @@ def get_test_results_by_skill(resume_id: int, skill_name: str, db: Session = Dep
         models.TestResult.skill_name == skill_name
     ).all()
     
+    # Get full question details for each result
+    details = []
+    for r in results:
+        # Get the question from the database
+        question = db.query(models.Question).filter(models.Question.id == r.question_id).first()
+        
+        if question:
+            details.append({
+                "question_id": r.question_id,
+                "question_text": question.question_text,
+                "option_a": question.option_a,
+                "option_b": question.option_b,
+                "option_c": question.option_c,
+                "option_d": question.option_d,
+                "user_answer": r.user_answer,
+                "correct_answer": question.correct_answer,
+                "is_correct": r.is_correct,
+                "explanation": question.explanation
+            })
+        else:
+            # Fallback if question not found
+            details.append({
+                "question_id": r.question_id,
+                "question_text": f"Question {r.question_id}",
+                "option_a": "",
+                "option_b": "",
+                "option_c": "",
+                "option_d": "",
+                "user_answer": r.user_answer,
+                "correct_answer": "",
+                "is_correct": r.is_correct,
+                "explanation": ""
+            })
+    
     return {
         "summary": {
             "skill_name": summary.skill_name,
@@ -922,14 +965,7 @@ def get_test_results_by_skill(resume_id: int, skill_name: str, db: Session = Dep
             "result_status": summary.result_status,
             "test_date": summary.test_date
         },
-        "details": [
-            {
-                "question_id": r.question_id,
-                "user_answer": r.user_answer,
-                "is_correct": r.is_correct
-            }
-            for r in results
-        ]
+        "details": details
     }
 
 @app.get("/api/test/all-results/{resume_id}")

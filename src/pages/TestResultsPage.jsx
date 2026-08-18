@@ -24,6 +24,7 @@ function TestResultsPage({ user, onLogout }) {
   const fetchResults = async () => {
     try {
       const data = await getTestResults(resumeId, skillName)
+      console.log('Results data:', data)
       setResults(data)
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load results.')
@@ -43,11 +44,19 @@ function TestResultsPage({ user, onLogout }) {
   }
 
   const getRecommendation = (score, status) => {
-    if (score >= 90) return 'Excellent! You\'re ready for advanced challenges.'
+    if (score >= 90) return 'Excellent! You are ready for advanced challenges.'
     if (score >= 70) return 'Good work! Keep practicing to reach expert level.'
     if (score >= 60) return 'You passed! Focus on improving weak areas.'
     if (score >= 50) return 'You need improvement. Review the basics.'
     return 'Strongly recommend revisiting fundamentals.'
+  }
+
+  const handleBackToDashboard = () => {
+    navigate('/student-dashboard')
+  }
+
+  const handleRetry = () => {
+    fetchResults()
   }
 
   if (loading) {
@@ -73,7 +82,7 @@ function TestResultsPage({ user, onLogout }) {
             {error}
           </div>
           <button
-            onClick={fetchResults}
+            onClick={handleRetry}
             className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
           >
             Retry
@@ -90,10 +99,15 @@ function TestResultsPage({ user, onLogout }) {
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <Navbar user={user} onLogout={onLogout} />
       
-      <div className="max-w-3xl mx-auto pt-28 pb-12 px-6">
+      <div className="max-w-4xl mx-auto pt-28 pb-12 px-6">
+        {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-block bg-gradient-to-r from-green-500 to-emerald-500 text-white px-6 py-2 rounded-full text-sm font-bold uppercase tracking-wider shadow-lg">
-            Test Completed
+          <div className={`inline-block px-6 py-2 rounded-full text-sm font-bold uppercase tracking-wider shadow-lg ${
+            summary?.result_status === 'Passed' 
+              ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' 
+              : 'bg-gradient-to-r from-red-500 to-pink-500 text-white'
+          }`}>
+            {summary?.result_status === 'Passed' ? 'Test Passed' : 'Test Failed'}
           </div>
           <h1 className="text-4xl font-extrabold text-gray-900 mt-4">
             {summary?.skill_name} Assessment
@@ -103,79 +117,166 @@ function TestResultsPage({ user, onLogout }) {
           </p>
         </div>
 
+        {/* Score Card */}
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 mb-8">
           <div className="text-center">
             <div className={`text-6xl font-bold ${getScoreColor(summary?.score_percentage)}`}>
-              {summary?.score_percentage.toFixed(1)}%
+              {summary?.score_percentage?.toFixed(1) || 0}%
             </div>
             <p className={`text-xl font-semibold mt-2 ${getStatusColor(summary?.result_status)}`}>
-              {summary?.result_status}
+              {summary?.result_status || 'N/A'}
             </p>
             <p className="text-gray-500 mt-1">
-              {summary?.correct_answers} correct out of {summary?.total_questions} questions
+              {summary?.correct_answers || 0} correct out of {summary?.total_questions || 0} questions
             </p>
           </div>
 
           <div className="mt-6 grid grid-cols-3 gap-4 text-center">
             <div className="bg-gray-50 rounded-xl p-4">
               <p className="text-sm text-gray-500">Total Questions</p>
-              <p className="text-2xl font-bold text-gray-800">{summary?.total_questions}</p>
+              <p className="text-2xl font-bold text-gray-800">{summary?.total_questions || 0}</p>
             </div>
             <div className="bg-green-50 rounded-xl p-4">
               <p className="text-sm text-gray-500">Correct</p>
-              <p className="text-2xl font-bold text-green-600">{summary?.correct_answers}</p>
+              <p className="text-2xl font-bold text-green-600">{summary?.correct_answers || 0}</p>
             </div>
             <div className="bg-red-50 rounded-xl p-4">
               <p className="text-sm text-gray-500">Incorrect</p>
               <p className="text-2xl font-bold text-red-600">
-                {summary?.total_questions - summary?.correct_answers}
+                {(summary?.total_questions || 0) - (summary?.correct_answers || 0)}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-blue-50 rounded-2xl p-6 border border-blue-200 mb-8">
-          <h3 className="font-bold text-blue-800 mb-2">Recommendation</h3>
-          <p className="text-blue-700">
+        {/* Recommendation */}
+        <div className={`rounded-2xl p-6 border mb-8 ${
+          summary?.score_percentage >= 60 ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'
+        }`}>
+          <h3 className={`font-bold mb-2 ${
+            summary?.score_percentage >= 60 ? 'text-blue-800' : 'text-orange-800'
+          }`}>
+            Recommendation
+          </h3>
+          <p className={summary?.score_percentage >= 60 ? 'text-blue-700' : 'text-orange-700'}>
             {getRecommendation(summary?.score_percentage, summary?.result_status)}
           </p>
         </div>
 
+        {/* Question Review */}
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">Question Review</h2>
-          <div className="space-y-4">
-            {details.map((detail, index) => (
-              <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Question {index + 1}</p>
-                  <p className="text-sm text-gray-500">
-                    Your answer: <span className={`font-semibold ${detail.is_correct ? 'text-green-600' : 'text-red-600'}`}>
-                      {detail.user_answer || 'Not answered'}
-                    </span>
-                  </p>
-                </div>
-                <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  detail.is_correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                }`}>
-                  {detail.is_correct ? 'Correct' : 'Incorrect'}
-                </div>
-              </div>
-            ))}
+          <h2 className="text-xl font-bold text-gray-800 mb-6">Question Review</h2>
+          <div className="space-y-6">
+            {details.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">No question details available.</p>
+            ) : (
+              details.map((detail, index) => {
+                const isCorrect = detail.is_correct === true || detail.is_correct === 1
+                
+                const questionText = detail.question_text || 
+                                    detail.question || 
+                                    `Question ${index + 1}`
+                
+                const userAnswer = detail.user_answer || 'Not answered'
+                const correctAnswer = detail.correct_answer || ''
+                
+                // Get options
+                const options = [
+                  { letter: 'A', text: detail.option_a || '' },
+                  { letter: 'B', text: detail.option_b || '' },
+                  { letter: 'C', text: detail.option_c || '' },
+                  { letter: 'D', text: detail.option_d || '' }
+                ].filter(opt => opt.text)
+                
+                return (
+                  <div key={index} className={`border-2 rounded-xl overflow-hidden ${
+                    isCorrect ? 'border-green-400' : 'border-red-400'
+                  }`}>
+                    {/* Header with question number and status */}
+                    <div className={`px-6 py-3 flex justify-between items-center ${
+                      isCorrect ? 'bg-green-50' : 'bg-red-50'
+                    }`}>
+                      <h3 className="font-semibold text-gray-700">
+                        Question {index + 1}
+                      </h3>
+                      <span className={`px-4 py-1 rounded-full text-sm font-bold text-white ${
+                        isCorrect ? 'bg-green-500' : 'bg-red-500'
+                      }`}>
+                        {isCorrect ? 'Correct' : 'Incorrect'}
+                      </span>
+                    </div>
+                    
+                    {/* Question Body */}
+                    <div className="p-6">
+                      {/* Question Text */}
+                      <p className="text-gray-800 font-medium mb-4">
+                        {questionText}
+                      </p>
+                      
+                      {/* Options */}
+                      {options.length > 0 && (
+                        <div className="space-y-2">
+                          {options.map((opt) => {
+                            const isUserAnswer = userAnswer && 
+                              userAnswer.toLowerCase() === opt.letter.toLowerCase()
+                            const isCorrectAnswer = correctAnswer && 
+                              correctAnswer.toLowerCase() === opt.letter.toLowerCase()
+                            
+                            let bgColor = 'bg-gray-50'
+                            let borderColor = 'border-gray-200'
+                            let textColor = 'text-gray-700'
+                            
+                            if (isUserAnswer && isCorrectAnswer) {
+                              bgColor = 'bg-green-100'
+                              borderColor = 'border-green-400'
+                              textColor = 'text-green-700'
+                            } else if (isUserAnswer && !isCorrectAnswer) {
+                              bgColor = 'bg-red-100'
+                              borderColor = 'border-red-400'
+                              textColor = 'text-red-700'
+                            } else if (isCorrectAnswer) {
+                              bgColor = 'bg-green-50'
+                              borderColor = 'border-green-300'
+                              textColor = 'text-green-700'
+                            }
+                            
+                            return (
+                              <div 
+                                key={opt.letter} 
+                                className={`px-4 py-2 rounded border ${bgColor} ${borderColor} ${textColor}`}
+                              >
+                                <span className="font-medium">{opt.letter}. </span>
+                                {opt.text}
+                                {isUserAnswer && (
+                                  <span className="ml-2 text-sm font-medium">
+                                    (Your Answer)
+                                  </span>
+                                )}
+                                {isCorrectAnswer && !isUserAnswer && (
+                                  <span className="ml-2 text-sm font-medium">
+                                    (Correct Answer)
+                                  </span>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })
+            )}
           </div>
         </div>
 
-        <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
+        {/* Buttons */}
+        <div className="mt-8 flex justify-center">
           <button
-            onClick={() => navigate('/student-dashboard')}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-xl hover:shadow-lg transition font-semibold"
+            onClick={handleBackToDashboard}
+            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-10 py-3 rounded-xl hover:shadow-lg transition font-semibold"
           >
             Back to Dashboard
-          </button>
-          <button
-            onClick={() => navigate(`/assessment/${resumeId}`)}
-            className="bg-gray-200 text-gray-700 px-8 py-3 rounded-xl hover:bg-gray-300 transition font-semibold"
-          >
-            Back to Assessments
           </button>
         </div>
       </div>

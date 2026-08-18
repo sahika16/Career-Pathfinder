@@ -35,21 +35,19 @@ function StudentDashboard({ user, onLogout }) {
   const handleContinue = () => {
     if (!progress || !user) return
     
+    // If skills rated, they are in assessment phase - stay on dashboard
     if (progress.skills_rated && progress.total_skills > 0) {
-      if (assessmentSkills.length > 0) {
-        const firstSkill = assessmentSkills[0].skill_name
-        navigate(`/assessment/${user.resumeId}/${firstSkill}`)
-      } else {
-        alert('No skills available for assessment.')
-      }
+      // Just show dashboard - don't navigate anywhere
       return
     }
     
+    // If skills exist but not rated - go to rating
     if (progress.has_skills && progress.total_skills > 0) {
       navigate(`/skill-rating/${user.resumeId}`)
       return
     }
     
+    // Otherwise go to review
     navigate(`/skill-review/${user.resumeId}`)
   }
 
@@ -59,6 +57,10 @@ function StudentDashboard({ user, onLogout }) {
       return
     }
     navigate(`/assessment/${user.resumeId}/${skillName}`)
+  }
+
+  const handleViewResults = (skillName) => {
+    navigate(`/results/${user.resumeId}/${skillName}`)
   }
 
   const handleStartNew = () => {
@@ -141,10 +143,14 @@ function StudentDashboard({ user, onLogout }) {
               {progress?.skills_rated ? ' Assessment' : 
                progress?.has_skills ? ' Skill Rating' : ' Skill Review'}
             </p>
+            {progress?.skills_rated && (
+              <p className="text-xs text-gray-500 mt-1">
+                Select a skill below to start your test
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Assessment Skills Section - Shows ALL core skills */}
         {isAssessmentAvailable && (
           <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 mb-8">
             <h2 className="text-xl font-bold text-gray-800 mb-6">Available Assessments</h2>
@@ -159,9 +165,12 @@ function StudentDashboard({ user, onLogout }) {
                       </p>
                     </div>
                     {skill.already_taken ? (
-                      <span className="text-green-600 font-medium text-sm px-3 py-1 bg-green-100 rounded-full">
-                        Completed
-                      </span>
+                      <button
+                        onClick={() => handleViewResults(skill.skill_name)}
+                        className="text-blue-600 font-medium text-sm px-3 py-1 bg-blue-50 rounded-full hover:bg-blue-100 transition"
+                      >
+                        View Results
+                      </button>
                     ) : skill.questions_available === 0 ? (
                       <span className="text-gray-400 font-medium text-sm px-3 py-1 bg-gray-100 rounded-full">
                         No Questions
@@ -188,7 +197,9 @@ function StudentDashboard({ user, onLogout }) {
           >
             Continue Where You Left Off
             <span className="block text-sm font-normal opacity-80">
-              {isAssessmentAvailable ? 'Ready for Assessment!' : `Current: ${progress?.skills_rated ? 'Assessment' : progress?.has_skills ? 'Skill Rating' : 'Skill Review'}`}
+              {progress?.skills_rated ? 'Assessment ' : 
+               progress?.has_skills ? 'Go to Skill Rating' : 
+               'Go to Skill Review'}
             </span>
           </button>
           

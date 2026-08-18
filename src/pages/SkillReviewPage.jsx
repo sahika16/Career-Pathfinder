@@ -23,7 +23,6 @@ function SkillReviewPage({ user, onLogout }) {
       setLoading(true)
       setError(null)
       const data = await getSkills(resumeId)
-      console.log('Skills fetched:', data)
       setSkills(data || [])
     } catch (err) {
       console.error('Error fetching skills:', err)
@@ -52,19 +51,17 @@ function SkillReviewPage({ user, onLogout }) {
   }
 
   const handleDelete = async (skillId) => {
-    if (window.confirm('Are you sure you want to delete this skill?')) {
-      try {
-        await deleteSkill(skillId)
-        setSkills(skills.filter(s => s.id !== skillId))
-      } catch (err) {
-        setError('Failed to delete skill. Please try again.')
-      }
+    try {
+      await deleteSkill(skillId)
+      setSkills(skills.filter(s => s.id !== skillId))
+    } catch (err) {
+      setError('Failed to delete skill. Please try again.')
     }
   }
 
   const handleAddSkill = async () => {
     if (!newSkill.trim()) {
-      alert('Please enter a skill name')
+      setError('Please enter a skill name')
       return
     }
 
@@ -80,7 +77,7 @@ function SkillReviewPage({ user, onLogout }) {
 
   const handleContinue = () => {
     if (skills.length === 0) {
-      alert('Please add at least one skill before continuing.')
+      setError('Please add at least one skill before continuing.')
       return
     }
     navigate(`/skill-rating/${resumeId}`)
@@ -126,7 +123,6 @@ function SkillReviewPage({ user, onLogout }) {
           </div>
         )}
 
-        {/* Skills List */}
         <div className="space-y-3">
           {skills.length === 0 ? (
             <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-300">
@@ -168,13 +164,13 @@ function SkillReviewPage({ user, onLogout }) {
                         onClick={() => handleEdit(skill)}
                         className="text-blue-500 hover:text-blue-700 transition p-2"
                       >
-                        ✏️ Edit
+                        Edit
                       </button>
                       <button
                         onClick={() => handleDelete(skill.id)}
                         className="text-red-500 hover:text-red-700 transition p-2"
                       >
-                        🗑️ Delete
+                        Delete
                       </button>
                     </div>
                   </>
@@ -184,7 +180,6 @@ function SkillReviewPage({ user, onLogout }) {
           )}
         </div>
 
-        {/* Add Skill */}
         <div className="mt-6">
           {showAddInput ? (
             <div className="flex items-center space-x-3">
@@ -221,7 +216,6 @@ function SkillReviewPage({ user, onLogout }) {
           )}
         </div>
 
-        {/* Continue Button */}
         <div className="mt-10">
           <button
             onClick={handleContinue}

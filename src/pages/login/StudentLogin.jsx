@@ -61,7 +61,7 @@ function StudentLogin({ onLogin }) {
       
       const progress = await getUserProgress(resumeData.resume_id)
       
-      alert(`Welcome, ${data.name}!`)
+      // No alert - directly proceed
       
       let redirectPath = '/'
       if (progress.skills_rated && progress.total_skills > 0) {
@@ -79,7 +79,8 @@ function StudentLogin({ onLogin }) {
         has_skills: progress.has_skills || false,
         skills_rated: progress.skills_rated || false,
         current_step: progress.current_step || 'review',
-        role: 'student'
+        role: 'student',
+        redirectPath: redirectPath
       }
       
       localStorage.setItem('careerUser', JSON.stringify(userData))
