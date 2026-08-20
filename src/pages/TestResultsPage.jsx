@@ -94,72 +94,91 @@ function TestResultsPage({ user, onLogout }) {
 
   const summary = results?.summary
   const details = results?.details || []
+  const totalQuestions = summary?.total_questions || 0
+  const correctAnswers = summary?.correct_answers || 0
+  const incorrectAnswers = totalQuestions - correctAnswers
+  const scorePercentage = summary?.score_percentage || 0
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <Navbar user={user} onLogout={onLogout} />
       
       <div className="max-w-4xl mx-auto pt-28 pb-12 px-6">
-        {/* Header */}
+        {/* Header - Assessment Result */}
         <div className="text-center mb-8">
           <div className={`inline-block px-6 py-2 rounded-full text-sm font-bold uppercase tracking-wider shadow-lg ${
             summary?.result_status === 'Passed' 
               ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' 
               : 'bg-gradient-to-r from-red-500 to-pink-500 text-white'
           }`}>
-            {summary?.result_status === 'Passed' ? 'Test Passed' : 'Test Failed'}
+            Assessment Result
           </div>
           <h1 className="text-4xl font-extrabold text-gray-900 mt-4">
             {summary?.skill_name} Assessment
           </h1>
           <p className="text-gray-600 mt-2">
-            {summary?.result_status === 'Passed' ? 'Congratulations!' : 'Keep learning!'}
+            {summary?.result_status === 'Passed' ? '🎉 Congratulations!' : '📚 Keep learning!'}
           </p>
         </div>
 
         {/* Score Card */}
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 mb-8">
           <div className="text-center">
-            <div className={`text-6xl font-bold ${getScoreColor(summary?.score_percentage)}`}>
-              {summary?.score_percentage?.toFixed(1) || 0}%
+            <div className={`text-7xl font-bold ${getScoreColor(scorePercentage)}`}>
+              {scorePercentage.toFixed(1)}%
             </div>
-            <p className={`text-xl font-semibold mt-2 ${getStatusColor(summary?.result_status)}`}>
+            <p className={`text-2xl font-semibold mt-2 ${getStatusColor(summary?.result_status)}`}>
               {summary?.result_status || 'N/A'}
             </p>
             <p className="text-gray-500 mt-1">
-              {summary?.correct_answers || 0} correct out of {summary?.total_questions || 0} questions
+              {correctAnswers} correct out of {totalQuestions} questions
             </p>
           </div>
 
-          <div className="mt-6 grid grid-cols-3 gap-4 text-center">
-            <div className="bg-gray-50 rounded-xl p-4">
+          {/* Statistics Cards */}
+          <div className="mt-8 grid grid-cols-3 gap-4 text-center">
+            <div className="bg-gray-100 rounded-xl p-4">
               <p className="text-sm text-gray-500">Total Questions</p>
-              <p className="text-2xl font-bold text-gray-800">{summary?.total_questions || 0}</p>
+              <p className="text-3xl font-bold text-gray-800">{totalQuestions}</p>
             </div>
-            <div className="bg-green-50 rounded-xl p-4">
+            <div className="bg-green-100 rounded-xl p-4">
               <p className="text-sm text-gray-500">Correct</p>
-              <p className="text-2xl font-bold text-green-600">{summary?.correct_answers || 0}</p>
+              <p className="text-3xl font-bold text-green-600">{correctAnswers}</p>
             </div>
-            <div className="bg-red-50 rounded-xl p-4">
+            <div className="bg-red-100 rounded-xl p-4">
               <p className="text-sm text-gray-500">Incorrect</p>
-              <p className="text-2xl font-bold text-red-600">
-                {(summary?.total_questions || 0) - (summary?.correct_answers || 0)}
-              </p>
+              <p className="text-3xl font-bold text-red-600">{incorrectAnswers}</p>
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="mt-6">
+            <div className="flex justify-between text-sm text-gray-500 mb-1">
+              <span>Progress</span>
+              <span>{scorePercentage.toFixed(0)}%</span>
+            </div>
+            <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden">
+              <div 
+                className={`h-full rounded-full transition-all duration-1000 ${
+                  scorePercentage >= 60 ? 'bg-gradient-to-r from-green-500 to-emerald-500' : 'bg-gradient-to-r from-red-500 to-pink-500'
+                }`}
+                style={{ width: `${scorePercentage}%` }}
+              />
             </div>
           </div>
         </div>
 
         {/* Recommendation */}
         <div className={`rounded-2xl p-6 border mb-8 ${
-          summary?.score_percentage >= 60 ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'
+          scorePercentage >= 60 ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'
         }`}>
           <h3 className={`font-bold mb-2 ${
-            summary?.score_percentage >= 60 ? 'text-blue-800' : 'text-orange-800'
+            scorePercentage >= 60 ? 'text-blue-800' : 'text-orange-800'
           }`}>
-            Recommendation
+            💡 Recommendation
           </h3>
-          <p className={summary?.score_percentage >= 60 ? 'text-blue-700' : 'text-orange-700'}>
-            {getRecommendation(summary?.score_percentage, summary?.result_status)}
+          <p className={scorePercentage >= 60 ? 'text-blue-700' : 'text-orange-700'}>
+            {getRecommendation(scorePercentage, summary?.result_status)}
           </p>
         </div>
 
@@ -172,13 +191,9 @@ function TestResultsPage({ user, onLogout }) {
             ) : (
               details.map((detail, index) => {
                 const isCorrect = detail.is_correct === true || detail.is_correct === 1
-                
-                const questionText = detail.question_text || 
-                                    detail.question || 
-                                    `Question ${index + 1}`
-                
                 const userAnswer = detail.user_answer || 'Not answered'
                 const correctAnswer = detail.correct_answer || ''
+                const explanation = detail.explanation || ''
                 
                 // Get options
                 const options = [
@@ -192,7 +207,7 @@ function TestResultsPage({ user, onLogout }) {
                   <div key={index} className={`border-2 rounded-xl overflow-hidden ${
                     isCorrect ? 'border-green-400' : 'border-red-400'
                   }`}>
-                    {/* Header with question number and status */}
+                    {/* Header */}
                     <div className={`px-6 py-3 flex justify-between items-center ${
                       isCorrect ? 'bg-green-50' : 'bg-red-50'
                     }`}>
@@ -202,15 +217,14 @@ function TestResultsPage({ user, onLogout }) {
                       <span className={`px-4 py-1 rounded-full text-sm font-bold text-white ${
                         isCorrect ? 'bg-green-500' : 'bg-red-500'
                       }`}>
-                        {isCorrect ? 'Correct' : 'Incorrect'}
+                        {isCorrect ? ' Correct' : ' Incorrect'}
                       </span>
                     </div>
                     
                     {/* Question Body */}
                     <div className="p-6">
-                      {/* Question Text */}
                       <p className="text-gray-800 font-medium mb-4">
-                        {questionText}
+                        {detail.question_text || `Question ${index + 1}`}
                       </p>
                       
                       {/* Options */}
@@ -225,19 +239,23 @@ function TestResultsPage({ user, onLogout }) {
                             let bgColor = 'bg-gray-50'
                             let borderColor = 'border-gray-200'
                             let textColor = 'text-gray-700'
+                            let label = ''
                             
                             if (isUserAnswer && isCorrectAnswer) {
                               bgColor = 'bg-green-100'
                               borderColor = 'border-green-400'
                               textColor = 'text-green-700'
+                            
                             } else if (isUserAnswer && !isCorrectAnswer) {
                               bgColor = 'bg-red-100'
                               borderColor = 'border-red-400'
                               textColor = 'text-red-700'
+                            
                             } else if (isCorrectAnswer) {
                               bgColor = 'bg-green-50'
                               borderColor = 'border-green-300'
                               textColor = 'text-green-700'
+                          
                             }
                             
                             return (
@@ -247,19 +265,21 @@ function TestResultsPage({ user, onLogout }) {
                               >
                                 <span className="font-medium">{opt.letter}. </span>
                                 {opt.text}
-                                {isUserAnswer && (
-                                  <span className="ml-2 text-sm font-medium">
-                                    (Your Answer)
-                                  </span>
-                                )}
-                                {isCorrectAnswer && !isUserAnswer && (
-                                  <span className="ml-2 text-sm font-medium">
-                                    (Correct Answer)
-                                  </span>
-                                )}
+                                <span className="text-sm font-medium">
+                                  {label}
+                                </span>
                               </div>
                             )
                           })}
+                        </div>
+                      )}
+                      
+                      {/* Explanation */}
+                      {explanation && (
+                        <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <p className="text-sm text-blue-700">
+                            <span className="font-semibold"> Explanation:</span> {explanation}
+                          </p>
                         </div>
                       )}
                     </div>

@@ -16,12 +16,13 @@ def has_test_been_taken(resume_id: int, skill_name: str, db: Session) -> bool:
     """Check if student has already taken test for this skill"""
     summary = db.query(models.TestSummary).filter(
         models.TestSummary.resume_id == resume_id,
-        models.TestSummary.skill_name.ilike(skill_name)
+        models.TestSummary.skill_name.ilike(skill_name)  # Case-insensitive
     ).first()
     return summary is not None
 
 def generate_test_for_skill(skill_name: str, difficulty: str, db: Session, limit: int = None):
     """Generate test questions for a specific skill - NO DUPLICATES"""
+    # Use ilike for case-insensitive matching
     questions = db.query(models.Question).filter(
         models.Question.skill_name.ilike(skill_name),
         models.Question.difficulty == difficulty
@@ -45,7 +46,6 @@ def generate_test_for_skill(skill_name: str, difficulty: str, db: Session, limit
     if limit is None:
         limit = len(unique_questions)
     
-    # Shuffle and select
     random.shuffle(unique_questions)
     shuffled = unique_questions[:min(limit, len(unique_questions))]
     
@@ -79,7 +79,7 @@ def evaluate_test_submission(resume_id: int, skill_name: str, answers: dict, db:
         
         test_result = models.TestResult(
             resume_id=resume_id,
-            skill_name=skill_name.lower(),
+            skill_name=skill_name.lower(),  # Store in lowercase
             question_id=question.id,
             user_answer=user_answer,
             is_correct=is_correct,
@@ -99,7 +99,7 @@ def evaluate_test_submission(resume_id: int, skill_name: str, answers: dict, db:
     
     summary = models.TestSummary(
         resume_id=resume_id,
-        skill_name=skill_name.lower(),
+        skill_name=skill_name.lower(),  # Store in lowercase
         total_questions=total_questions,
         correct_answers=correct_count,
         score_percentage=score_percentage,
@@ -120,6 +120,7 @@ def evaluate_test_submission(resume_id: int, skill_name: str, answers: dict, db:
 
 def get_test_results(resume_id: int, skill_name: str, db: Session):
     """Get test results for a specific skill with explanations"""
+    # Use ilike for case-insensitive matching
     summary = db.query(models.TestSummary).filter(
         models.TestSummary.resume_id == resume_id,
         models.TestSummary.skill_name.ilike(skill_name)
@@ -141,12 +142,17 @@ def get_test_results(resume_id: int, skill_name: str, db: Session):
             "user_answer": r.user_answer,
             "is_correct": r.is_correct,
             "correct_answer": question.correct_answer if question else None,
-            "explanation": question.explanation if question else None
+            "explanation": question.explanation if question else None,
+            "question_text": question.question_text if question else None,
+            "option_a": question.option_a if question else None,
+            "option_b": question.option_b if question else None,
+            "option_c": question.option_c if question else None,
+            "option_d": question.option_d if question else None
         })
     
     return {
         "summary": {
-            "skill_name": summary.skill_name,
+            "skill_name": summary.skill_name.title(),  # Capitalize first letter
             "total_questions": summary.total_questions,
             "correct_answers": summary.correct_answers,
             "score_percentage": summary.score_percentage,
@@ -175,7 +181,7 @@ def get_available_skills_for_assessment(resume_id: int, db: Session):
         
         result.append({
             "id": skill.id,
-            "skill_name": skill.skill_name,
+            "skill_name": skill.skill_name.title(),  # Capitalize first letter
             "rating": skill.rating,
             "rating_level": skill.rating_level,
             "questions_available": question_count,
@@ -189,4 +195,4 @@ def get_completed_skills(resume_id: int, db: Session):
     summaries = db.query(models.TestSummary).filter(
         models.TestSummary.resume_id == resume_id
     ).all()
-    return [s.skill_name for s in summaries]
+    return [s.skill_name.title() for s in summaries]  # Capitalize first letter

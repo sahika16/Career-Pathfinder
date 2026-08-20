@@ -906,12 +906,13 @@ def submit_test(submission_data: dict, db: Session = Depends(get_db)):
     results = evaluate_test_submission(resume_id, skill_name, answers, db)
     
     return results
-
 @app.get("/api/test/results/{resume_id}/{skill_name}")
 def get_test_results_by_skill(resume_id: int, skill_name: str, db: Session = Depends(get_db)):
+    """Get test results for a specific skill - Case Insensitive"""
+    # Use ILIKE for case-insensitive matching
     summary = db.query(models.TestSummary).filter(
         models.TestSummary.resume_id == resume_id,
-        models.TestSummary.skill_name == skill_name
+        models.TestSummary.skill_name.ilike(skill_name)  # Case-insensitive
     ).first()
     
     if not summary:
@@ -919,42 +920,24 @@ def get_test_results_by_skill(resume_id: int, skill_name: str, db: Session = Dep
     
     results = db.query(models.TestResult).filter(
         models.TestResult.resume_id == resume_id,
-        models.TestResult.skill_name == skill_name
+        models.TestResult.skill_name.ilike(skill_name)  # Case-insensitive
     ).all()
     
-    # Get full question details for each result
     details = []
     for r in results:
-        # Get the question from the database
         question = db.query(models.Question).filter(models.Question.id == r.question_id).first()
-        
-        if question:
-            details.append({
-                "question_id": r.question_id,
-                "question_text": question.question_text,
-                "option_a": question.option_a,
-                "option_b": question.option_b,
-                "option_c": question.option_c,
-                "option_d": question.option_d,
-                "user_answer": r.user_answer,
-                "correct_answer": question.correct_answer,
-                "is_correct": r.is_correct,
-                "explanation": question.explanation
-            })
-        else:
-            # Fallback if question not found
-            details.append({
-                "question_id": r.question_id,
-                "question_text": f"Question {r.question_id}",
-                "option_a": "",
-                "option_b": "",
-                "option_c": "",
-                "option_d": "",
-                "user_answer": r.user_answer,
-                "correct_answer": "",
-                "is_correct": r.is_correct,
-                "explanation": ""
-            })
+        details.append({
+            "question_id": r.question_id,
+            "user_answer": r.user_answer,
+            "is_correct": r.is_correct,
+            "correct_answer": question.correct_answer if question else None,
+            "explanation": question.explanation if question else None,
+            "question_text": question.question_text if question else None,
+            "option_a": question.option_a if question else None,
+            "option_b": question.option_b if question else None,
+            "option_c": question.option_c if question else None,
+            "option_d": question.option_d if question else None
+        })
     
     return {
         "summary": {
@@ -967,7 +950,6 @@ def get_test_results_by_skill(resume_id: int, skill_name: str, db: Session = Dep
         },
         "details": details
     }
-
 @app.get("/api/test/all-results/{resume_id}")
 def get_all_test_results(resume_id: int, db: Session = Depends(get_db)):
     results = db.query(models.TestSummary).filter(
