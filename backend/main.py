@@ -19,23 +19,14 @@ from assessment import (
     has_test_been_taken,
     get_completed_skills
 )
-
-# ====== ENVIRONMENT VARIABLES ======
 import os
 from dotenv import load_dotenv
-
-# ====== SMTP ======
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-
-# ====== TWILIO ======
 from twilio.rest import Client
-
-# ====== BCRYPT ======
 import bcrypt
 
-# Load environment variables from .env file
 load_dotenv()
 
 # ====== SMTP CREDENTIALS ======
@@ -47,7 +38,6 @@ TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
 
-# ====== ADMIN CREDENTIALS (from .env) ======
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 ADMIN_PASSWORD_HASH = os.getenv("ADMIN_PASSWORD_HASH")
 
@@ -234,7 +224,7 @@ def send_otp_email(email: str, otp: str, name: str = "Student"):
         print(f"❌ Email Error: {str(e)}")
         return False, str(e)
 
-# ====== UPLOAD RESUME ======
+# ====== UPLOAD RESUME (STUDENTS ONLY) ======
 @app.post("/api/upload-resume")
 async def upload_resume(
     file: UploadFile = File(...),
@@ -256,6 +246,16 @@ async def upload_resume(
         if phone:
             phone = normalize_phone_for_db(phone)
         
+        # Check if email already exists as student
+        existing_student = db.query(models.Resume).filter(models.Resume.email == parsed_data.get('email')).first()
+        if existing_student:
+            raise HTTPException(status_code=400, detail="Email already registered as student")
+        
+        # Check if email already exists as trainer
+        existing_trainer = db.query(models.Trainer).filter(models.Trainer.email == parsed_data.get('email')).first()
+        if existing_trainer:
+            raise HTTPException(status_code=400, detail="Email already registered as trainer")
+        
         resume = models.Resume(
             filename=file.filename,
             file_data=file_content,
@@ -273,7 +273,7 @@ async def upload_resume(
         db.flush()
         
         all_skills = parsed_data.get('skills', [])
-        print(f"✅ Found {len(all_skills)} skills: {all_skills}")
+        #print(f" Found {len(all_skills)} skills: {all_skills}")
         
         for skill_name in all_skills:
             skill = models.Skill(
@@ -300,7 +300,7 @@ async def upload_resume(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
-# ====== GET ALL RESUMES ======
+# ====== GET ALL STUDENTS ======
 @app.get("/api/resumes")
 def get_all_resumes(db: Session = Depends(get_db)):
     resumes = db.query(models.Resume).order_by(models.Resume.uploaded_at.desc()).all()
@@ -322,7 +322,7 @@ def get_all_resumes(db: Session = Depends(get_db)):
         })
     return result
 
-# ====== GET SKILLS FOR A RESUME ======
+# ====== GET SKILLS FOR A STUDENT ======
 @app.get("/api/skills/{resume_id}")
 def get_skills(resume_id: int, db: Session = Depends(get_db)):
     skills = db.query(models.Skill).filter(models.Skill.resume_id == resume_id).all()
@@ -490,7 +490,7 @@ def update_concept_ratings(resume_id: int, ratings: List[RatingUpdate], db: Sess
     db.commit()
     return {"message": "Concept ratings updated"}
 
-# ====== UPDATE RESUME STATUS ======
+# ====== UPDATE RESUME STATUS (STUDENT) ======
 @app.put("/api/resume/{resume_id}/status")
 def update_resume_status(resume_id: int, status_data: StatusUpdate, db: Session = Depends(get_db)):
     resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
@@ -672,18 +672,27 @@ def get_user_progress(resume_id: int, db: Session = Depends(get_db)):
 # ====== TRAINER REGISTRATION ======
 @app.post("/api/trainer/register")
 def register_trainer(trainer_data: TrainerRegister, db: Session = Depends(get_db)):
-    existing = db.query(models.Resume).filter(models.Resume.email == trainer_data.email).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+    # Check if trainer already exists in trainers table
+    existing_trainer = db.query(models.Trainer).filter(models.Trainer.email == trainer_data.email).first()
+    if existing_trainer:
+        raise HTTPException(status_code=400, detail="Email already registered as trainer")
+    
+    # Check if email exists in resumes table (students)
+    existing_student = db.query(models.Resume).filter(models.Resume.email == trainer_data.email).first()
+    if existing_student:
+        raise HTTPException(status_code=400, detail="Email already registered as student")
     
     hashed_password = bcrypt.hashpw(trainer_data.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     
-    trainer = models.Resume(
+    # Create trainer in the dedicated trainers table
+    trainer = models.Trainer(
         name=trainer_data.name,
         email=trainer_data.email,
         phone=trainer_data.phone,
-        role="trainer",
         password=hashed_password,
+        specialty=trainer_data.specialty,
+        experience=trainer_data.experience,
+        education=trainer_data.education,
         is_approved=False,
         status="pending_approval"
     )
@@ -692,19 +701,23 @@ def register_trainer(trainer_data: TrainerRegister, db: Session = Depends(get_db
     db.commit()
     db.refresh(trainer)
     
+    print(f"✅ Trainer registered in trainers table: {trainer.name} (ID: {trainer.id})")
+    
     return {
         "message": "Trainer registered successfully. Please wait for admin approval.",
         "id": trainer.id,
         "name": trainer.name,
-        "email": trainer.email
+        "email": trainer.email,
+        "role": "trainer",
+        "status": trainer.status
     }
 
 # ====== TRAINER LOGIN ======
 @app.post("/api/login/trainer")
 def login_trainer(login_data: TrainerLogin, db: Session = Depends(get_db)):
-    trainer = db.query(models.Resume).filter(
-        models.Resume.email == login_data.email,
-        models.Resume.role == 'trainer'
+    # Query from trainers table
+    trainer = db.query(models.Trainer).filter(
+        models.Trainer.email == login_data.email
     ).first()
     
     if not trainer:
@@ -721,7 +734,8 @@ def login_trainer(login_data: TrainerLogin, db: Session = Depends(get_db)):
         "id": trainer.id,
         "name": trainer.name,
         "email": trainer.email,
-        "role": "trainer"
+        "role": "trainer",
+        "is_approved": trainer.is_approved
     }
 
 # ====== ADMIN LOGIN ======
@@ -740,13 +754,38 @@ def login_admin(login_data: AdminLogin):
         "role": "admin"
     }
 
-# ====== ADMIN: Get Pending Trainers ======
-@app.get("/api/admin/pending-trainers")
-def get_pending_trainers(db: Session = Depends(get_db)):
-    trainers = db.query(models.Resume).filter(
-        models.Resume.role == 'trainer',
-        models.Resume.is_approved == False
-    ).all()
+# ====== ADMIN: Get All Students ======
+@app.get("/api/admin/students")
+def get_all_students(db: Session = Depends(get_db)):
+    """Get ONLY students from resumes table"""
+    students = db.query(models.Resume).order_by(models.Resume.uploaded_at.desc()).all()
+    
+    result = []
+    for student in students:
+        skills = db.query(models.Skill).filter(models.Skill.resume_id == student.id).all()
+        result.append({
+            "id": student.id,
+            "name": student.name,
+            "email": student.email,
+            "phone": student.phone,
+            "skills": [skill.skill_name for skill in skills],
+            "skills_rated": student.skills_rated,
+            "test_completed": student.test_completed,
+            "uploaded_at": student.uploaded_at,
+            "current_step": student.current_step,
+            "status": student.status
+        })
+    
+    #print(f" Found {len(result)} students")
+    return result
+
+# ====== ADMIN: Get All Trainers ======
+@app.get("/api/admin/trainers")
+def get_all_trainers(db: Session = Depends(get_db)):
+    """Get ONLY trainers from trainers table"""
+    trainers = db.query(models.Trainer).order_by(models.Trainer.created_at.desc()).all()
+    
+    #print(f"📊 Found {len(trainers)} trainers in trainers table")
     
     return [
         {
@@ -757,38 +796,21 @@ def get_pending_trainers(db: Session = Depends(get_db)):
             "education": t.education,
             "experience": t.experience,
             "specialty": t.specialty,
-            "created_at": t.uploaded_at
+            "is_approved": t.is_approved,
+            "status": t.status,
+            "created_at": t.created_at
         }
         for t in trainers
     ]
 
-# ====== ADMIN: Approve Trainer ======
-@app.put("/api/admin/approve-trainer/{trainer_id}")
-def approve_trainer(trainer_id: int, db: Session = Depends(get_db)):
-    trainer = db.query(models.Resume).filter(
-        models.Resume.id == trainer_id,
-        models.Resume.role == 'trainer'
-    ).first()
-    
-    if not trainer:
-        raise HTTPException(status_code=404, detail="Trainer not found")
-    
-    trainer.is_approved = True
-    trainer.status = "approved"
-    
-    db.commit()
-    db.refresh(trainer)
-    
-    return {
-        "message": "Trainer approved successfully",
-        "id": trainer.id,
-        "name": trainer.name
-    }
-
-# ====== ADMIN: Get All Trainers ======
-@app.get("/api/admin/trainers")
-def get_all_trainers(db: Session = Depends(get_db)):
-    trainers = db.query(models.Resume).filter(models.Resume.role == 'trainer').all()
+# ====== ADMIN: Get Pending Trainers ======
+@app.get("/api/admin/pending-trainers")
+def get_pending_trainers(db: Session = Depends(get_db)):
+    """Get pending trainers from trainers table"""
+    trainers = db.query(models.Trainer).filter(
+        models.Trainer.is_approved == False,
+        models.Trainer.status == 'pending_approval'
+    ).order_by(models.Trainer.created_at.desc()).all()
     
     return [
         {
@@ -796,30 +818,157 @@ def get_all_trainers(db: Session = Depends(get_db)):
             "name": t.name,
             "email": t.email,
             "phone": t.phone,
-            "is_approved": t.is_approved,
-            "status": t.status,
-            "created_at": t.uploaded_at
+            "education": t.education,
+            "experience": t.experience,
+            "specialty": t.specialty,
+            "created_at": t.created_at
         }
         for t in trainers
     ]
 
-# ====== ADMIN: Get All Students ======
-@app.get("/api/admin/students")
-def get_all_students(db: Session = Depends(get_db)):
-    students = db.query(models.Resume).filter(models.Resume.role == 'student').all()
+# ====== ADMIN: Approve Trainer ======
+@app.put("/api/admin/approve-trainer/{trainer_id}")
+def approve_trainer(trainer_id: int, db: Session = Depends(get_db)):
+    """Approve trainer in trainers table"""
+    trainer = db.query(models.Trainer).filter(
+        models.Trainer.id == trainer_id
+    ).first()
     
-    return [
-        {
-            "id": s.id,
-            "name": s.name,
-            "email": s.email,
-            "phone": s.phone,
-            "skills": [skill.skill_name for skill in s.skills],
-            "concepts": [concept.concept_name for concept in s.concept_skills],
-            "uploaded_at": s.uploaded_at
-        }
-        for s in students
-    ]
+    if not trainer:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    
+    trainer.is_approved = True
+    trainer.status = "approved"
+    trainer.updated_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    db.refresh(trainer)
+    
+    #print(f"✅ Trainer approved: {trainer.name} (ID: {trainer.id})")
+    
+    return {
+        "message": "Trainer approved successfully",
+        "id": trainer.id,
+        "name": trainer.name,
+        "is_approved": trainer.is_approved
+    }
+
+# ====== ADMIN: Reject Trainer ======
+@app.put("/api/admin/reject-trainer/{trainer_id}")
+def reject_trainer(trainer_id: int, db: Session = Depends(get_db)):
+    """Reject trainer in trainers table"""
+    trainer = db.query(models.Trainer).filter(
+        models.Trainer.id == trainer_id
+    ).first()
+    
+    if not trainer:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    
+    trainer.status = "rejected"
+    trainer.updated_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    db.refresh(trainer)
+    
+    #print(f"❌ Trainer rejected: {trainer.name} (ID: {trainer.id})")
+    
+    return {
+        "message": "Trainer rejected",
+        "id": trainer.id,
+        "name": trainer.name,
+        "status": trainer.status
+    }
+
+# ====== ADMIN: Get Single Trainer ======
+@app.get("/api/admin/trainer/{trainer_id}")
+def get_trainer(trainer_id: int, db: Session = Depends(get_db)):
+    """Get a single trainer by ID from trainers table"""
+    trainer = db.query(models.Trainer).filter(
+        models.Trainer.id == trainer_id
+    ).first()
+    
+    if not trainer:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    
+    return {
+        "id": trainer.id,
+        "name": trainer.name,
+        "email": trainer.email,
+        "phone": trainer.phone,
+        "education": trainer.education,
+        "experience": trainer.experience,
+        "specialty": trainer.specialty,
+        "is_approved": trainer.is_approved,
+        "status": trainer.status,
+        "created_at": trainer.created_at,
+        "updated_at": trainer.updated_at
+    }
+
+# ====== ADMIN: Update Trainer ======
+@app.put("/api/admin/trainer/{trainer_id}")
+def update_trainer(trainer_id: int, trainer_data: dict, db: Session = Depends(get_db)):
+    """Update trainer information in trainers table"""
+    trainer = db.query(models.Trainer).filter(
+        models.Trainer.id == trainer_id
+    ).first()
+    
+    if not trainer:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    
+    allowed_fields = ['name', 'phone', 'specialty', 'experience', 'education']
+    
+    for field in allowed_fields:
+        if field in trainer_data and trainer_data[field] is not None:
+            setattr(trainer, field, trainer_data[field])
+    
+    trainer.updated_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    db.refresh(trainer)
+    
+    return {
+        "message": "Trainer updated successfully",
+        "id": trainer.id,
+        "name": trainer.name
+    }
+
+# ====== ADMIN: Delete Trainer ======
+@app.delete("/api/admin/trainer/{trainer_id}")
+def delete_trainer(trainer_id: int, db: Session = Depends(get_db)):
+    """Delete a trainer from trainers table"""
+    trainer = db.query(models.Trainer).filter(
+        models.Trainer.id == trainer_id
+    ).first()
+    
+    if not trainer:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    
+    db.delete(trainer)
+    db.commit()
+    
+    #print(f"🗑️ Trainer deleted: {trainer.name} (ID: {trainer.id})")
+    
+    return {"message": "Trainer deleted successfully"}
+
+# ====== TRAINER CHECK ENDPOINT ======
+@app.get("/api/trainer/check/{email}")
+def check_trainer_exists(email: str, db: Session = Depends(get_db)):
+    """Check if a trainer exists by email"""
+    trainer = db.query(models.Trainer).filter(
+        models.Trainer.email == email
+    ).first()
+    
+    if not trainer:
+        return {"exists": False}
+    
+    return {
+        "exists": True,
+        "id": trainer.id,
+        "name": trainer.name,
+        "email": trainer.email,
+        "is_approved": trainer.is_approved,
+        "status": trainer.status
+    }
 
 # ====== ASSESSMENT ENDPOINTS ======
 
@@ -828,9 +977,8 @@ def generate_test(resume_id: int, skill_name: str, db: Session = Depends(get_db)
     """Generate a test for a specific skill - NO DUPLICATES"""
     resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
     if not resume:
-        raise HTTPException(status_code=404, detail="Resume not found")
+        raise HTTPException(status_code=404, detail="Student not found")
     
-    # Get the skill rating
     skill = db.query(models.Skill).filter(
         models.Skill.resume_id == resume_id,
         models.Skill.skill_name.ilike(skill_name)
@@ -842,7 +990,6 @@ def generate_test(resume_id: int, skill_name: str, db: Session = Depends(get_db)
     if skill.rating is None:
         raise HTTPException(status_code=400, detail="Skill not rated yet")
     
-    # Determine difficulty based on rating
     if skill.rating <= 4:
         difficulty = "Easy"
     elif skill.rating <= 7:
@@ -850,7 +997,6 @@ def generate_test(resume_id: int, skill_name: str, db: Session = Depends(get_db)
     else:
         difficulty = "Hard"
     
-    # Check if test already taken
     from assessment import has_test_been_taken
     if has_test_been_taken(resume_id, skill_name, db):
         return {
@@ -861,14 +1007,11 @@ def generate_test(resume_id: int, skill_name: str, db: Session = Depends(get_db)
             "message": "You have already completed this test."
         }
     
-    # Generate test questions
     questions = generate_test_for_skill(skill_name, difficulty, db)
     
     if not questions:
         raise HTTPException(status_code=404, detail=f"No questions found for {skill_name} with {difficulty} difficulty")
     
-    # ====== REMOVE DUPLICATES ======
-    # Remove duplicates by id
     seen = set()
     unique_questions = []
     for q in questions:
@@ -906,13 +1049,12 @@ def submit_test(submission_data: dict, db: Session = Depends(get_db)):
     results = evaluate_test_submission(resume_id, skill_name, answers, db)
     
     return results
+
 @app.get("/api/test/results/{resume_id}/{skill_name}")
 def get_test_results_by_skill(resume_id: int, skill_name: str, db: Session = Depends(get_db)):
-    """Get test results for a specific skill - Case Insensitive"""
-    # Use ILIKE for case-insensitive matching
     summary = db.query(models.TestSummary).filter(
         models.TestSummary.resume_id == resume_id,
-        models.TestSummary.skill_name.ilike(skill_name)  # Case-insensitive
+        models.TestSummary.skill_name.ilike(skill_name)
     ).first()
     
     if not summary:
@@ -920,7 +1062,7 @@ def get_test_results_by_skill(resume_id: int, skill_name: str, db: Session = Dep
     
     results = db.query(models.TestResult).filter(
         models.TestResult.resume_id == resume_id,
-        models.TestResult.skill_name.ilike(skill_name)  # Case-insensitive
+        models.TestResult.skill_name.ilike(skill_name)
     ).all()
     
     details = []
@@ -950,6 +1092,7 @@ def get_test_results_by_skill(resume_id: int, skill_name: str, db: Session = Dep
         },
         "details": details
     }
+
 @app.get("/api/test/all-results/{resume_id}")
 def get_all_test_results(resume_id: int, db: Session = Depends(get_db)):
     results = db.query(models.TestSummary).filter(
@@ -1067,7 +1210,6 @@ def get_all_skill_names(db: Session = Depends(get_db)):
 
 @app.get("/api/assessment/skills/{resume_id}")
 def get_assessment_skills(resume_id: int, db: Session = Depends(get_db)):
-    """Get all skills with ratings AND questions for assessment"""
     from assessment import get_available_skills_for_assessment
     return get_available_skills_for_assessment(resume_id, db)
 
@@ -1104,7 +1246,6 @@ def add_admin_skill(skill_data: dict, db: Session = Depends(get_db)):
 
 @app.get("/api/test/completed/{resume_id}")
 def get_completed_skills(resume_id: int, db: Session = Depends(get_db)):
-    """Get list of skills already completed by student"""
     from assessment import get_completed_skills
     completed = get_completed_skills(resume_id, db)
     return {"completed": completed}

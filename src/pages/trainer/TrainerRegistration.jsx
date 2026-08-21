@@ -49,6 +49,7 @@ function TrainerRegistration() {
       })
       
       setSuccess(true)
+      // Clear form fields
       setFormData({
         name: '',
         email: '',
@@ -60,15 +61,15 @@ function TrainerRegistration() {
         confirmPassword: ''
       })
       
-      setTimeout(() => {
-        navigate('/login/trainer')
-      }, 3000)
-      
     } catch (err) {
       setError(err.response?.data?.detail || 'Registration failed. Please try again.')
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleLoginRedirect = () => {
+    navigate('/login/trainer')
   }
 
   return (
@@ -92,7 +93,7 @@ function TrainerRegistration() {
               Become a Trainer
             </h1>
             <p className="text-gray-600 mt-2">
-              Register to help students grow. Your account needs admin approval.
+              And help students to grow.
             </p>
           </div>
 
@@ -104,7 +105,7 @@ function TrainerRegistration() {
 
           {success && (
             <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-xl mb-4 text-sm">
-              ✅ Registration successful! Please wait for admin approval. You will be notified once approved.
+              Registration successful! Please wait for admin approval. 
             </div>
           )}
 
@@ -244,7 +245,7 @@ function TrainerRegistration() {
             <p className="text-sm text-gray-500">
               Already have an account?{' '}
               <button
-                onClick={() => navigate('/login/trainer')}
+                onClick={handleLoginRedirect}
                 className="text-blue-600 hover:text-blue-800 font-medium transition"
               >
                 Login here

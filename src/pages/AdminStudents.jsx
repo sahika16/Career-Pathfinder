@@ -37,7 +37,17 @@ function AdminStudents({ user, onLogout }) {
       setLoading(true)
       setError(null)
       const data = await getAllResumes()
-      const studentList = data.filter(s => s.role === 'student' || !s.role)
+      
+      // Filter ONLY students - EXCLUDE trainers and admins
+      const studentList = data.filter(s => 
+        s.role !== 'trainer' && 
+        s.role !== 'admin' &&
+        (s.role === 'student' || s.role === null || s.role === '' || s.role === undefined)
+      )
+      
+      console.log('📊 Students found:', studentList.length)
+      console.log('📊 Trainers excluded:', data.filter(s => s.role === 'trainer').length)
+      
       setStudents(studentList)
       setFilteredStudents(studentList)
     } catch (err) {
@@ -85,13 +95,6 @@ function AdminStudents({ user, onLogout }) {
     let cleaned = phone.replace('+91', '').trim()
     cleaned = cleaned.replace(/\s/g, '')
     return cleaned || 'N/A'
-  }
-
-  const getRatingLevel = (rating) => {
-    if (rating >= 8) return 'bg-green-500 text-white'
-    if (rating >= 5) return 'bg-yellow-500 text-white'
-    if (rating >= 1) return 'bg-red-500 text-white'
-    return 'bg-gray-300 text-gray-600'
   }
 
   if (loading && !showDetails) {
@@ -235,7 +238,7 @@ function AdminStudents({ user, onLogout }) {
         </div>
       </div>
 
-      {/* Student Details Modal - Clean Version */}
+      {/* Student Details Modal */}
       {showDetails && studentDetails && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -252,7 +255,6 @@ function AdminStudents({ user, onLogout }) {
             </div>
 
             <div className="p-6">
-              {/* Skills Section */}
               <h3 className="font-semibold text-gray-800 mb-3">Skills & Ratings</h3>
               {studentDetails.skills && studentDetails.skills.length > 0 ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-6">
@@ -274,7 +276,6 @@ function AdminStudents({ user, onLogout }) {
                 <p className="text-gray-500 text-sm mb-6">No skills rated yet.</p>
               )}
 
-              {/* Test Results Section */}
               <h3 className="font-semibold text-gray-800 mb-3">Test Results</h3>
               {studentDetails.testResults && studentDetails.testResults.length > 0 ? (
                 <div className="space-y-3">

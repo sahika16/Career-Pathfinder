@@ -195,4 +195,4 @@ def get_completed_skills(resume_id: int, db: Session):
     summaries = db.query(models.TestSummary).filter(
         models.TestSummary.resume_id == resume_id
     ).all()
-    return [s.skill_name.title() for s in summaries]  # Capitalize first letter
+    return [s.skill_name.title() for s in summaries]  

@@ -2,6 +2,7 @@ import axios from 'axios'
 
 const API_BASE_URL = 'http://localhost:8000/api'
 
+// ====== RESUME UPLOAD ======
 export const uploadResume = async (file) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -15,6 +16,7 @@ export const uploadResume = async (file) => {
     }
 }
 
+// ====== SKILL MANAGEMENT ======
 export const getSkills = async (resumeId) => {
     try {
         const response = await axios.get(`${API_BASE_URL}/skills/${resumeId}`)
@@ -69,6 +71,7 @@ export const updateResumeStatus = async (resumeId, data) => {
     }
 }
 
+// ====== OTP LOGIN ======
 export const sendLoginOTP = async (emailOrPhone) => {
     try {
         const response = await axios.post(`${API_BASE_URL}/login/send-otp`, { 
@@ -111,6 +114,7 @@ export const getUserProgress = async (resumeId) => {
     }
 }
 
+// ====== ASSESSMENT FUNCTIONS ======
 export const generateTest = async (resumeId, skillName) => {
     try {
         const response = await axios.get(`${API_BASE_URL}/test/generate/${resumeId}/${skillName}`)
@@ -165,6 +169,7 @@ export const getCompletedSkills = async (resumeId) => {
     }
 }
 
+// ====== ADMIN: Question Management ======
 export const addQuestion = async (questionData) => {
     try {
         const response = await axios.post(`${API_BASE_URL}/admin/question`, questionData)
@@ -276,6 +281,7 @@ export const addAdminSkill = async (skillName) => {
     }
 }
 
+// ====== ADMIN: Student Management ======
 export const getAllResumes = async () => {
     try {
         const response = await axios.get(`${API_BASE_URL}/resumes`)
@@ -296,6 +302,16 @@ export const getAllResumes = async () => {
             return response.data.results
         }
         return []
+    } catch (error) {
+        throw error
+    }
+}
+
+// ====== ADMIN: Get All Test Results (For Dashboard) ======
+export const getAllTestResultsForAdmin = async () => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/test/all-results`)
+        return response.data
     } catch (error) {
         throw error
     }

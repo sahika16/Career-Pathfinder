@@ -41,15 +41,35 @@ class Resume(Base):
     concept_skills = relationship("ConceptSkill", back_populates="resume", cascade="all, delete-orphan")
     test_results = relationship("TestResult", back_populates="resume", cascade="all, delete-orphan")
 
+
+# ====== Trainer Table (Separate from Resumes) ======
+class Trainer(Base):
+    __tablename__ = "trainers"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    email = Column(String(100), unique=True, nullable=False)
+    phone = Column(String(20), nullable=True)
+    password = Column(String(255), nullable=False)
+    specialty = Column(String(100), nullable=True)
+    experience = Column(Text, nullable=True)
+    education = Column(Text, nullable=True)
+    is_approved = Column(Boolean, default=False)
+    status = Column(String(50), default="pending_approval")
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
 class Skill(Base):
     __tablename__ = "skills"
     
     id = Column(Integer, primary_key=True, index=True)
     resume_id = Column(Integer, ForeignKey("resumes.id"))
     skill_name = Column(String(100), nullable=False)
-    rating = Column(Integer, nullable=True)  # 1-10 rating
-    rating_level = Column(String(20), nullable=True)  # Basic, Intermediate, Advanced
-    is_core = Column(Boolean, default=True)  # True = Core, False = Other
+    rating = Column(Integer, nullable=True)
+    rating_level = Column(String(20), nullable=True)
+    is_core = Column(Boolean, default=True)
     
     resume = relationship("Resume", back_populates="skills")
 
