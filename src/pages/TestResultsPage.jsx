@@ -14,6 +14,7 @@ function TestResultsPage({ user, onLogout }) {
 
   useEffect(() => {
     if (location.state?.results) {
+      console.log('Results from state:', location.state.results)
       setResults(location.state.results)
       setLoading(false)
     } else {
@@ -24,7 +25,7 @@ function TestResultsPage({ user, onLogout }) {
   const fetchResults = async () => {
     try {
       const data = await getTestResults(resumeId, skillName)
-      console.log('Results data:', data)
+      console.log('Results from API:', data)
       setResults(data)
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load results.')
@@ -43,7 +44,7 @@ function TestResultsPage({ user, onLogout }) {
     return 'text-red-600'
   }
 
-  const getRecommendation = (score, status) => {
+  const getRecommendation = (score) => {
     if (score >= 90) return 'Excellent! You are ready for advanced challenges.'
     if (score >= 70) return 'Good work! Keep practicing to reach expert level.'
     if (score >= 60) return 'You passed! Focus on improving weak areas.'
@@ -53,10 +54,6 @@ function TestResultsPage({ user, onLogout }) {
 
   const handleBackToDashboard = () => {
     navigate('/student-dashboard')
-  }
-
-  const handleRetry = () => {
-    fetchResults()
   }
 
   if (loading) {
@@ -82,7 +79,7 @@ function TestResultsPage({ user, onLogout }) {
             {error}
           </div>
           <button
-            onClick={handleRetry}
+            onClick={fetchResults}
             className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
           >
             Retry
@@ -98,26 +95,27 @@ function TestResultsPage({ user, onLogout }) {
   const correctAnswers = summary?.correct_answers || 0
   const incorrectAnswers = totalQuestions - correctAnswers
   const scorePercentage = summary?.score_percentage || 0
+  const resultStatus = summary?.result_status || 'N/A'
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <Navbar user={user} onLogout={onLogout} />
       
       <div className="max-w-4xl mx-auto pt-28 pb-12 px-6">
-        {/* Header - Assessment Result */}
+        {/* Header */}
         <div className="text-center mb-8">
           <div className={`inline-block px-6 py-2 rounded-full text-sm font-bold uppercase tracking-wider shadow-lg ${
-            summary?.result_status === 'Passed' 
+            resultStatus === 'Passed' 
               ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' 
               : 'bg-gradient-to-r from-red-500 to-pink-500 text-white'
           }`}>
-            Assessment Result
+            Result
           </div>
           <h1 className="text-4xl font-extrabold text-gray-900 mt-4">
-            {summary?.skill_name} Assessment
+            {summary?.skill_name || skillName} Assessment
           </h1>
           <p className="text-gray-600 mt-2">
-            {summary?.result_status === 'Passed' ? '🎉 Congratulations!' : '📚 Keep learning!'}
+            {resultStatus === 'Passed' ? 'Congratulations!' : 'Keep learning!'}
           </p>
         </div>
 
@@ -127,15 +125,14 @@ function TestResultsPage({ user, onLogout }) {
             <div className={`text-7xl font-bold ${getScoreColor(scorePercentage)}`}>
               {scorePercentage.toFixed(1)}%
             </div>
-            <p className={`text-2xl font-semibold mt-2 ${getStatusColor(summary?.result_status)}`}>
-              {summary?.result_status || 'N/A'}
+            <p className={`text-2xl font-semibold mt-2 ${getStatusColor(resultStatus)}`}>
+              {resultStatus}
             </p>
             <p className="text-gray-500 mt-1">
               {correctAnswers} correct out of {totalQuestions} questions
             </p>
           </div>
 
-          {/* Statistics Cards */}
           <div className="mt-8 grid grid-cols-3 gap-4 text-center">
             <div className="bg-gray-100 rounded-xl p-4">
               <p className="text-sm text-gray-500">Total Questions</p>
@@ -151,16 +148,17 @@ function TestResultsPage({ user, onLogout }) {
             </div>
           </div>
 
-          {/* Progress Bar */}
           <div className="mt-6">
             <div className="flex justify-between text-sm text-gray-500 mb-1">
               <span>Progress</span>
               <span>{scorePercentage.toFixed(0)}%</span>
             </div>
-            <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden">
+            <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
               <div 
                 className={`h-full rounded-full transition-all duration-1000 ${
-                  scorePercentage >= 60 ? 'bg-gradient-to-r from-green-500 to-emerald-500' : 'bg-gradient-to-r from-red-500 to-pink-500'
+                  scorePercentage >= 60 
+                    ? 'bg-gradient-to-r from-green-500 to-emerald-500' 
+                    : 'bg-gradient-to-r from-red-500 to-pink-500'
                 }`}
                 style={{ width: `${scorePercentage}%` }}
               />
@@ -175,27 +173,28 @@ function TestResultsPage({ user, onLogout }) {
           <h3 className={`font-bold mb-2 ${
             scorePercentage >= 60 ? 'text-blue-800' : 'text-orange-800'
           }`}>
-            💡 Recommendation
+            Recommendation
           </h3>
           <p className={scorePercentage >= 60 ? 'text-blue-700' : 'text-orange-700'}>
-            {getRecommendation(scorePercentage, summary?.result_status)}
+            {getRecommendation(scorePercentage)}
           </p>
         </div>
 
         {/* Question Review */}
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
           <h2 className="text-xl font-bold text-gray-800 mb-6">Question Review</h2>
-          <div className="space-y-6">
-            {details.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No question details available.</p>
-            ) : (
-              details.map((detail, index) => {
+          
+          {details.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">No question details available.</p>
+          ) : (
+            <div className="space-y-6">
+              {details.map((detail, index) => {
                 const isCorrect = detail.is_correct === true || detail.is_correct === 1
                 const userAnswer = detail.user_answer || 'Not answered'
                 const correctAnswer = detail.correct_answer || ''
+                const questionText = detail.question_text || `Question ${index + 1}`
                 const explanation = detail.explanation || ''
                 
-                // Get options
                 const options = [
                   { letter: 'A', text: detail.option_a || '' },
                   { letter: 'B', text: detail.option_b || '' },
@@ -207,39 +206,35 @@ function TestResultsPage({ user, onLogout }) {
                   <div key={index} className={`border-2 rounded-xl overflow-hidden ${
                     isCorrect ? 'border-green-400' : 'border-red-400'
                   }`}>
-                    {/* Header */}
                     <div className={`px-6 py-3 flex justify-between items-center ${
                       isCorrect ? 'bg-green-50' : 'bg-red-50'
                     }`}>
                       <h3 className="font-semibold text-gray-700">
                         Question {index + 1}
                       </h3>
-                      <span className={`px-4 py-1 rounded-full text-sm font-bold text-white ${
+                      <span className={`px-3 py-1 rounded-full text-sm font-bold text-white ${
                         isCorrect ? 'bg-green-500' : 'bg-red-500'
                       }`}>
-                        {isCorrect ? ' Correct' : ' Incorrect'}
+                        {isCorrect ? 'Correct' : 'Incorrect'}
                       </span>
                     </div>
                     
-                    {/* Question Body */}
                     <div className="p-6">
                       <p className="text-gray-800 font-medium mb-4">
-                        {detail.question_text || `Question ${index + 1}`}
+                        {questionText}
                       </p>
                       
-                      {/* Options */}
                       {options.length > 0 && (
                         <div className="space-y-2">
                           {options.map((opt) => {
                             const isUserAnswer = userAnswer && 
-                              userAnswer.toLowerCase() === opt.letter.toLowerCase()
+                              userAnswer.toUpperCase() === opt.letter.toUpperCase()
                             const isCorrectAnswer = correctAnswer && 
-                              correctAnswer.toLowerCase() === opt.letter.toLowerCase()
+                              correctAnswer.toUpperCase() === opt.letter.toUpperCase()
                             
                             let bgColor = 'bg-gray-50'
                             let borderColor = 'border-gray-200'
                             let textColor = 'text-gray-700'
-                            let label = ''
                             
                             if (isUserAnswer && isCorrectAnswer) {
                               bgColor = 'bg-green-100'
@@ -255,7 +250,6 @@ function TestResultsPage({ user, onLogout }) {
                               bgColor = 'bg-green-50'
                               borderColor = 'border-green-300'
                               textColor = 'text-green-700'
-                          
                             }
                             
                             return (
@@ -264,30 +258,26 @@ function TestResultsPage({ user, onLogout }) {
                                 className={`px-4 py-2 rounded border ${bgColor} ${borderColor} ${textColor}`}
                               >
                                 <span className="font-medium">{opt.letter}. </span>
-                                {opt.text}
-                                <span className="text-sm font-medium">
-                                  {label}
-                                </span>
+                                <span>{opt.text}</span>
                               </div>
                             )
                           })}
                         </div>
                       )}
                       
-                      {/* Explanation */}
                       {explanation && (
-                        <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
                           <p className="text-sm text-blue-700">
-                            <span className="font-semibold"> Explanation:</span> {explanation}
+                            <span className="font-semibold">Explanation:</span> {explanation}
                           </p>
                         </div>
                       )}
                     </div>
                   </div>
                 )
-              })
-            )}
-          </div>
+              })}
+            </div>
+          )}
         </div>
 
         {/* Buttons */}

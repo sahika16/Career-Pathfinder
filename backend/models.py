@@ -32,6 +32,7 @@ class Resume(Base):
     test_completed = Column(Boolean, default=False)
     concept_test_completed = Column(Boolean, default=False)
     current_step = Column(String(50), default="upload")
+    complete_status = Column(Boolean, default=False)
     
     status = Column(String(50), default="pending")
     uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -40,7 +41,6 @@ class Resume(Base):
     skills = relationship("Skill", back_populates="resume", cascade="all, delete-orphan")
     concept_skills = relationship("ConceptSkill", back_populates="resume", cascade="all, delete-orphan")
     test_results = relationship("TestResult", back_populates="resume", cascade="all, delete-orphan")
-
 
 # ====== Trainer Table (Separate from Resumes) ======
 class Trainer(Base):
@@ -60,7 +60,7 @@ class Trainer(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-
+# ====== Skill Models ======
 class Skill(Base):
     __tablename__ = "skills"
     

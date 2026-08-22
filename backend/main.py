@@ -246,12 +246,10 @@ async def upload_resume(
         if phone:
             phone = normalize_phone_for_db(phone)
         
-        # Check if email already exists as student
         existing_student = db.query(models.Resume).filter(models.Resume.email == parsed_data.get('email')).first()
         if existing_student:
             raise HTTPException(status_code=400, detail="Email already registered as student")
         
-        # Check if email already exists as trainer
         existing_trainer = db.query(models.Trainer).filter(models.Trainer.email == parsed_data.get('email')).first()
         if existing_trainer:
             raise HTTPException(status_code=400, detail="Email already registered as trainer")
@@ -672,12 +670,10 @@ def get_user_progress(resume_id: int, db: Session = Depends(get_db)):
 # ====== TRAINER REGISTRATION ======
 @app.post("/api/trainer/register")
 def register_trainer(trainer_data: TrainerRegister, db: Session = Depends(get_db)):
-    # Check if trainer already exists in trainers table
     existing_trainer = db.query(models.Trainer).filter(models.Trainer.email == trainer_data.email).first()
     if existing_trainer:
         raise HTTPException(status_code=400, detail="Email already registered as trainer")
     
-    # Check if email exists in resumes table (students)
     existing_student = db.query(models.Resume).filter(models.Resume.email == trainer_data.email).first()
     if existing_student:
         raise HTTPException(status_code=400, detail="Email already registered as student")
@@ -701,7 +697,7 @@ def register_trainer(trainer_data: TrainerRegister, db: Session = Depends(get_db
     db.commit()
     db.refresh(trainer)
     
-    print(f"✅ Trainer registered in trainers table: {trainer.name} (ID: {trainer.id})")
+    #print(f"✅ Trainer registered in trainers table: {trainer.name} (ID: {trainer.id})")
     
     return {
         "message": "Trainer registered successfully. Please wait for admin approval.",
@@ -712,7 +708,6 @@ def register_trainer(trainer_data: TrainerRegister, db: Session = Depends(get_db
         "status": trainer.status
     }
 
-# ====== TRAINER LOGIN ======
 @app.post("/api/login/trainer")
 def login_trainer(login_data: TrainerLogin, db: Session = Depends(get_db)):
     # Query from trainers table
@@ -738,7 +733,6 @@ def login_trainer(login_data: TrainerLogin, db: Session = Depends(get_db)):
         "is_approved": trainer.is_approved
     }
 
-# ====== ADMIN LOGIN ======
 @app.post("/api/login/admin")
 def login_admin(login_data: AdminLogin):
     if login_data.email != ADMIN_EMAIL:
