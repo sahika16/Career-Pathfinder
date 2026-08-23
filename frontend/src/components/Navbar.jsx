@@ -64,7 +64,7 @@ function Navbar({ onUploadClick, user, onLogout }) {
           className="flex items-center space-x-2 cursor-pointer"
         >
           <span className="text-2xl font-extrabold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-            Career Pathfinder
+            CareerPath
           </span>
         </div>
 

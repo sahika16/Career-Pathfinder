@@ -88,7 +88,7 @@ function TrainerLoginPage() {
               Trainer Login
             </div>
             <h1 className="text-3xl font-extrabold text-gray-900 mt-4">
-              Welcome Back!
+              Welcome!
             </h1>
             <p className="text-gray-600 mt-2">
               Enter your credentials to continue
