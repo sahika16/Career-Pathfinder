@@ -28,7 +28,7 @@ function Footer() {
           <div>
             <h4 className="font-bold text-white mb-4 text-lg">Contact</h4>
             <ul className="space-y-3 text-gray-400 text-sm">
-              <li className="hover:text-white transition">support@careerpathfinder.com</li>
+              <li className="hover:text-white transition">support@careerpath.com</li>
               <li className="hover:text-white transition">+1 (555) 123-4567</li>
               <li className="hover:text-white transition">123 AI Street, Silicon Valley</li>
             </ul>
@@ -44,7 +44,7 @@ function Footer() {
           </div>
         </div>
         <div className="border-t border-gray-700 mt-12 pt-8 text-center text-gray-400 text-sm">
-          © 2026 Career Pathfinder. All rights reserved.
+          © 2026 CareerPath. All rights reserved.
         </div>
       </div>
     </footer>
