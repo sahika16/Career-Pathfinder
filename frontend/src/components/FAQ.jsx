@@ -9,8 +9,8 @@ function FAQ() {
 
   const faqs = [
     {
-      question: "Is Career Pathfinder free to download?",
-      answer: "Yes! Career Pathfinder is completely free for students. You can upload your resume, get AI analysis, career matching, and learning recommendations at no cost."
+      question: "Is CareerPath free to download?",
+      answer: "Yes! CareerPath is completely free for students. You can upload your resume, get AI analysis, career matching, and learning recommendations at no cost."
     },
     {
       question: "Can I upload multiple resumes?",
