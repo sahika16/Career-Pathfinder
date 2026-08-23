@@ -169,6 +169,67 @@ export const getCompletedSkills = async (resumeId) => {
     }
 }
 
+// ====== TRAINER MANAGEMENT ======
+export const getAllTrainers = async () => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/admin/trainers`)
+        return response.data
+    } catch (error) {
+        console.error('Error fetching trainers:', error)
+        throw error
+    }
+}
+
+export const getPendingTrainers = async () => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/admin/pending-trainers`)
+        return response.data
+    } catch (error) {
+        console.error('Error fetching pending trainers:', error)
+        throw error
+    }
+}
+
+export const approveTrainer = async (trainerId) => {
+    try {
+        const response = await axios.put(`${API_BASE_URL}/admin/approve-trainer/${trainerId}`)
+        return response.data
+    } catch (error) {
+        console.error('Error approving trainer:', error)
+        throw error
+    }
+}
+
+export const rejectTrainer = async (trainerId) => {
+    try {
+        const response = await axios.put(`${API_BASE_URL}/admin/reject-trainer/${trainerId}`)
+        return response.data
+    } catch (error) {
+        console.error('Error rejecting trainer:', error)
+        throw error
+    }
+}
+
+export const loginTrainer = async (email, password) => {
+    try {
+        const response = await axios.post(`${API_BASE_URL}/login/trainer`, { email, password })
+        return response.data
+    } catch (error) {
+        console.error('Error logging in trainer:', error)
+        throw error
+    }
+}
+
+export const registerTrainer = async (trainerData) => {
+    try {
+        const response = await axios.post(`${API_BASE_URL}/trainer/register`, trainerData)
+        return response.data
+    } catch (error) {
+        console.error('Error registering trainer:', error)
+        throw error
+    }
+}
+
 // ====== ADMIN: Question Management ======
 export const addQuestion = async (questionData) => {
     try {
@@ -307,7 +368,6 @@ export const getAllResumes = async () => {
     }
 }
 
-// ====== ADMIN: Get All Test Results (For Dashboard) ======
 export const getAllTestResultsForAdmin = async () => {
     try {
         const response = await axios.get(`${API_BASE_URL}/test/all-results`)

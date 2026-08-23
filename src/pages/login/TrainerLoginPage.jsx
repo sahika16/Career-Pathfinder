@@ -22,6 +22,8 @@ function TrainerLoginPage() {
       setLoading(true)
       setError(null)
       
+      console.log('Attempting trainer login with:', email)
+      
       const response = await axios.post('http://localhost:8000/api/login/trainer', {
         email: email.trim(),
         password: password
@@ -29,26 +31,36 @@ function TrainerLoginPage() {
       
       const data = response.data
       
+      console.log('Trainer login response:', data)
+      
       if (!data.is_approved) {
         setError('Your account is pending approval. Please wait for admin approval.')
         setLoading(false)
         return
       }
       
-      alert(`Welcome, ${data.name}!`)
-      
       const userData = {
+        id: data.id,
         name: data.name,
         email: data.email,
-        resumeId: data.id,
-        role: 'trainer'
+        role: 'trainer',
+        is_approved: data.is_approved
       }
       
-      localStorage.setItem('careerUser', JSON.stringify(userData))
-      window.location.href = '/trainer-dashboard'
+      // Store in sessionStorage - only for this tab
+      sessionStorage.setItem('careerUser', JSON.stringify(userData))
+      sessionStorage.setItem('careerLoginTime', Date.now().toString())
+      
+      // Navigate to trainer dashboard
+      navigate('/trainer-dashboard')
       
     } catch (err) {
-      setError(err.response?.data?.detail || 'Invalid credentials. Please try again.')
+      console.error('Login error:', err)
+      if (err.response?.status === 403) {
+        setError('Your account is pending approval. Please wait for admin approval.')
+      } else {
+        setError(err.response?.data?.detail || 'Invalid credentials. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -76,10 +88,10 @@ function TrainerLoginPage() {
               Trainer Login
             </div>
             <h1 className="text-3xl font-extrabold text-gray-900 mt-4">
-              Welcome!
+              Welcome Back!
             </h1>
             <p className="text-gray-600 mt-2">
-              Enter your credentials 
+              Enter your credentials to continue
             </p>
           </div>
 

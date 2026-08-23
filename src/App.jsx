@@ -21,9 +21,6 @@ import AdminSkills from './pages/AdminSkills'
 import AdminStudents from './pages/AdminStudents'
 import AdminTrainers from './pages/AdminTrainers'
 
-// ====== SESSION TIMEOUT ======
-const SESSION_TIMEOUT = 3 * 60 * 60 * 1000 // 3 hours
-
 // ====== STORAGE KEYS ======
 const USER_STORAGE_KEY = 'careerUser'
 const LOGIN_TIME_KEY = 'careerLoginTime'
@@ -38,24 +35,28 @@ function AppContent() {
   }, [])
 
   const checkSession = () => {
-    // Use sessionStorage instead of localStorage
+    // Use sessionStorage - each tab has its own session
     const storedUser = sessionStorage.getItem(USER_STORAGE_KEY)
     const loginTime = sessionStorage.getItem(LOGIN_TIME_KEY)
+    
+    console.log('AppContent - storedUser:', storedUser)
+    console.log('AppContent - loginTime:', loginTime)
     
     if (storedUser && loginTime) {
       const elapsed = Date.now() - parseInt(loginTime)
       
-      if (elapsed > SESSION_TIMEOUT) {
+      // Session timeout (3 hours)
+      if (elapsed > 3 * 60 * 60 * 1000) {
         sessionStorage.removeItem(USER_STORAGE_KEY)
         sessionStorage.removeItem(LOGIN_TIME_KEY)
         setUser(null)
-        navigate('/login/student')
         setLoading(false)
         return
       }
       
       try {
         const userData = JSON.parse(storedUser)
+        console.log('AppContent - userData from sessionStorage:', userData)
         setUser(userData)
       } catch (e) {
         sessionStorage.removeItem(USER_STORAGE_KEY)
@@ -66,8 +67,10 @@ function AppContent() {
   }
 
   const handleLogin = (userData) => {
+    console.log('AppContent - handleLogin:', userData)
     setUser(userData)
-    // Use sessionStorage (separate per tab)
+    
+    // Store in sessionStorage - only for this tab
     sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData))
     sessionStorage.setItem(LOGIN_TIME_KEY, Date.now().toString())
     
@@ -102,20 +105,16 @@ function AppContent() {
 
   return (
     <Routes>
-      {/* Public Routes */}
       <Route path="/" element={<LandingPage user={user} onLogout={handleLogout} />} />
       
-      {/* Login Routes */}
       <Route path="/login/student" element={<StudentLogin onLogin={handleLogin} />} />
       <Route path="/login/trainer" element={<TrainerLoginPage />} />
       <Route path="/login/admin" element={<AdminLoginPage onLogin={handleLogin} />} />
       <Route path="/trainer/register" element={<TrainerRegistration />} />
       
-      {/* Skill Routes */}
       <Route path="/skill-review/:resumeId" element={<SkillReviewPage user={user} onLogout={handleLogout} />} />
       <Route path="/skill-rating/:resumeId" element={<SkillRatingPage user={user} onLogout={handleLogout} />} />
       
-      {/* Assessment Routes - with skillName */}
       <Route path="/assessment/:resumeId/:skillName" element={
         <ProtectedRoute user={user} allowedRoles={['student']}>
           <AssessmentPage user={user} onLogout={handleLogout} />
@@ -128,7 +127,6 @@ function AppContent() {
         </ProtectedRoute>
       } />
       
-      {/* Admin Routes */}
       <Route path="/admin-dashboard" element={
         <ProtectedRoute user={user} allowedRoles={['admin']}>
           <AdminDashboard user={user} onLogout={handleLogout} />
@@ -153,7 +151,6 @@ function AppContent() {
         </ProtectedRoute>
       } />
       
-      {/* Dashboard Routes */}
       <Route path="/student-dashboard" element={
         <ProtectedRoute user={user} allowedRoles={['student']}>
           <StudentDashboard user={user} onLogout={handleLogout} />
