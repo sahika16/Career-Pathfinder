@@ -15,8 +15,6 @@ function RegularTrainerDashboard({ user, onLogout }) {
   const [success, setSuccess] = useState(null)
   const [activeTab, setActiveTab] = useState('sessions')
   const [uploading, setUploading] = useState(false)
-  const [selectedContent, setSelectedContent] = useState(null)
-  const [showPreview, setShowPreview] = useState(false)
 
   const [formData, setFormData] = useState({
     title: '',
@@ -54,10 +52,14 @@ function RegularTrainerDashboard({ user, onLogout }) {
   const contentTypes = ['video', 'pdf', 'document', 'notes', 'quiz', 'assignment', 'presentation', 'other']
 
   useEffect(() => {
-    fetchSessions()
-    fetchContents()
-    fetchTrainerSettings()
-  }, [])
+    if (user && user.id) {
+      fetchSessions()
+      fetchContents()
+      fetchTrainerSettings()
+    } else {
+      setLoading(false)
+    }
+  }, [user])
 
   const fetchSessions = async () => {
     try {
@@ -65,8 +67,6 @@ function RegularTrainerDashboard({ user, onLogout }) {
       setSessions(response.data)
     } catch (err) {
       console.error('Error fetching sessions:', err)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -96,6 +96,8 @@ function RegularTrainerDashboard({ user, onLogout }) {
       }
     } catch (err) {
       console.error('Error fetching trainer settings:', err)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -234,36 +236,9 @@ function RegularTrainerDashboard({ user, onLogout }) {
     }
   }
 
-  const handleViewContent = (content) => {
-    setSelectedContent(content)
-    setShowPreview(true)
-  }
-
-  const closePreview = () => {
-    setShowPreview(false)
-    setSelectedContent(null)
-  }
-
-  const getContentIcon = (type) => {
-    const icons = {
-      'video': '🎬',
-      'pdf': '📄',
-      'document': '📄',
-      'notes': '📝',
-      'quiz': '❓',
-      'assignment': '📋',
-      'presentation': '📊',
-      'other': '📁'
-    }
-    return icons[type] || '📄'
-  }
-
-  const getDifficultyBadge = (difficulty) => {
-    switch(difficulty) {
-      case 'Easy': return 'Easy'
-      case 'Medium': return 'Medium'
-      case 'Hard': return 'Hard'
-      default: return 'N/A'
+  const handleCardClick = (content) => {
+    if (content.content_url) {
+      window.open(content.content_url, '_blank')
     }
   }
 
@@ -274,6 +249,57 @@ function RegularTrainerDashboard({ user, onLogout }) {
       case 'Hard': return 'bg-red-500'
       default: return 'bg-gray-500'
     }
+  }
+
+  const getDifficultyBadge = (difficulty) => {
+    switch(difficulty) {
+      case 'Easy': return 'Easy'
+      case 'Medium': return 'Medium'
+      case 'Hard': return 'Hard'
+      default: return ''
+    }
+  }
+
+  const getContentIcon = (type) => {
+    switch(type) {
+      case 'video': return '🎬'
+      case 'pdf': return '📄'
+      case 'document': return '📄'
+      case 'image': return '🖼️'
+      case 'quiz': return '📝'
+      case 'assignment': return '📋'
+      case 'notes': return '📓'
+      case 'presentation': return '📊'
+      default: return '📎'
+    }
+  }
+
+  const getContentLabel = (type) => {
+    switch(type) {
+      case 'video': return 'Video'
+      case 'pdf': return 'PDF'
+      case 'document': return 'Document'
+      case 'image': return 'Image'
+      case 'quiz': return 'Quiz'
+      case 'assignment': return 'Assignment'
+      case 'notes': return 'Notes'
+      case 'presentation': return 'Presentation'
+      default: return 'File'
+    }
+  }
+
+  if (!user || !user.id) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar user={user} onLogout={onLogout} />
+        <div className="flex items-center justify-center h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading user data...</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (loading) {
@@ -726,7 +752,7 @@ function RegularTrainerDashboard({ user, onLogout }) {
               </div>
             )}
 
-            {/* Content Cards with All Details */}
+            {/* Content Cards with Icons */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
               {contents.length === 0 ? (
                 <div className="col-span-full text-center py-16">
@@ -738,23 +764,25 @@ function RegularTrainerDashboard({ user, onLogout }) {
                   <div 
                     key={content.id} 
                     className="group bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden cursor-pointer hover:-translate-y-1"
-                    onClick={() => handleViewContent(content)}
+                    onClick={() => handleCardClick(content)}
                   >
-                    {/* Thumbnail / Card Image */}
+                    {/* Card Image / Thumbnail with Icon */}
                     <div className="relative aspect-video bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                      <span className="text-5xl opacity-50">{getContentIcon(content.content_type)}</span>
+                      <div className="text-6xl opacity-60">
+                        {getContentIcon(content.content_type)}
+                      </div>
                       
+                      {/* File type label */}
+                      <div className="absolute bottom-2 left-2 px-3 py-1 rounded-full text-xs font-medium text-white bg-black/50 backdrop-blur-sm">
+                        {getContentLabel(content.content_type)}
+                      </div>
+
                       {/* Difficulty Badge on LEFT side */}
                       {content.difficulty && (
                         <div className={`absolute top-2 left-2 px-3 py-1 rounded-full text-xs font-bold text-white shadow-lg ${getDifficultyColor(content.difficulty)}`}>
                           {getDifficultyBadge(content.difficulty)}
                         </div>
                       )}
-
-                      {/* Content Type Badge - Bottom Left */}
-                      <div className="absolute bottom-2 left-2 px-3 py-1 rounded-full text-xs font-medium text-white bg-black/50 backdrop-blur-sm">
-                        {content.content_type}
-                      </div>
 
                       {/* Delete Button on RIGHT side */}
                       <button
@@ -767,42 +795,28 @@ function RegularTrainerDashboard({ user, onLogout }) {
                       </button>
                     </div>
 
-                    {/* Content Details - ALL DETAILS SHOWN HERE */}
+                    {/* Content Details */}
                     <div className="p-4">
-                      {/* Title */}
                       <h3 className="font-semibold text-gray-800 text-sm line-clamp-2 hover:text-blue-600 transition">
                         {content.title}
                       </h3>
                       
-                      {/* Skill Name */}
                       {content.skill_name && (
                         <p className="text-xs text-blue-600 font-medium mt-1">
                           {content.skill_name}
                         </p>
                       )}
                       
-                      {/* Content Type & Difficulty */}
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-gray-500 capitalize">
-                          {content.content_type}
-                        </span>
-                        {content.difficulty && (
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                            content.difficulty === 'Easy' ? 'bg-green-100 text-green-700' :
-                            content.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-red-100 text-red-700'
-                          }`}>
-                            {content.difficulty}
-                          </span>
-                        )}
+                      <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                        <span className="capitalize">{content.content_type}</span>
+                        <span className="text-gray-300">•</span>
+                        <span>{content.difficulty || 'N/A'}</span>
                       </div>
 
-                      {/* Date */}
                       <span className="text-xs text-gray-400 block mt-1">
                         {content.created_at ? new Date(content.created_at).toLocaleDateString() : ''}
                       </span>
 
-                      {/* Description */}
                       {content.description && (
                         <p className="text-xs text-gray-500 mt-2 line-clamp-2">
                           {content.description}
@@ -814,67 +828,6 @@ function RegularTrainerDashboard({ user, onLogout }) {
               )}
             </div>
           </>
-        )}
-
-        {/* Content Preview Modal */}
-        {showPreview && selectedContent && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[95vh] overflow-y-auto">
-              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">{selectedContent.title}</h2>
-                  <p className="text-sm text-gray-500">
-                    {selectedContent.content_type} • {selectedContent.difficulty || 'N/A'} • {selectedContent.skill_name || 'No skill'}
-                  </p>
-                </div>
-                <button
-                  onClick={closePreview}
-                  className="text-gray-400 hover:text-gray-600 text-3xl"
-                >
-                  ×
-                </button>
-              </div>
-
-              <div className="p-6">
-                {selectedContent.description && (
-                  <div className="mb-6 p-4 bg-gray-50 rounded-xl">
-                    <p className="text-gray-700">{selectedContent.description}</p>
-                  </div>
-                )}
-
-                <div className="bg-gray-50 rounded-xl p-4 min-h-[200px] flex items-center justify-center">
-                  {selectedContent.content_url ? (
-                    <div className="text-center">
-                      <div className="text-4xl mb-2">📄</div>
-                      <a
-                        href={selectedContent.content_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 text-lg font-medium hover:underline"
-                      >
-                        View Content →
-                      </a>
-                    </div>
-                  ) : (
-                    <p className="text-gray-500">No preview available</p>
-                  )}
-                </div>
-
-                {selectedContent.content_url && (
-                  <div className="mt-6 text-center">
-                    <a
-                      href={selectedContent.content_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition font-medium inline-flex items-center gap-2"
-                    >
-                      📥 Open Full Content
-                    </a>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
         )}
 
         {/* Settings Tab */}
