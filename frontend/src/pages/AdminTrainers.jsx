@@ -14,7 +14,11 @@ function AdminTrainers({ user, onLogout }) {
   const [stats, setStats] = useState({
     total: 0,
     approved: 0,
-    pending: 0
+    pending: 0,
+    members: 0,
+    trainers: 0,
+    regular: 0,
+    personalized: 0
   })
 
   useEffect(() => {
@@ -28,7 +32,9 @@ function AdminTrainers({ user, onLogout }) {
         (t.email?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
         (t.phone || '').includes(searchTerm) ||
         (t.id?.toString() || '').includes(searchTerm) ||
-        (t.specialty?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+        (t.specialty?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        (t.role?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        (t.category?.toLowerCase() || '').includes(searchTerm.toLowerCase())
       )
       setFilteredTrainers(filtered)
     } else {
@@ -48,21 +54,29 @@ function AdminTrainers({ user, onLogout }) {
       }
       
       const data = await response.json()
-      console.log('📊 Trainers data received:', data)
       
       setTrainers(data)
       setFilteredTrainers(data)
       
-      // Calculate stats
       const total = data.length
       const approved = data.filter(t => t.is_approved === true).length
       const pending = data.filter(t => t.is_approved === false && t.status === 'pending_approval').length
+      const members = data.filter(t => t.role === 'member').length
+      const trainersOnly = data.filter(t => t.role === 'trainer').length
+      const regular = data.filter(t => t.category === 'regular').length
+      const personalized = data.filter(t => t.category === 'personalized').length
       
-      setStats({ total, approved, pending })
+      setStats({ 
+        total, 
+        approved, 
+        pending, 
+        members, 
+        trainers: trainersOnly, 
+        regular, 
+        personalized 
+      })
       
-      console.log('📊 Stats calculated:', { total, approved, pending })
     } catch (err) {
-      console.error('Error fetching trainers:', err)
       setError('Failed to load trainers data. Please try again.')
     } finally {
       setLoading(false)
@@ -70,7 +84,7 @@ function AdminTrainers({ user, onLogout }) {
   }
 
   const handleApprove = async (trainerId) => {
-    if (!window.confirm('Are you sure you want to approve this trainer?')) return
+    if (!window.confirm('Approve this trainer?')) return
     
     try {
       const response = await fetch(`http://localhost:8000/api/admin/approve-trainer/${trainerId}`, {
@@ -84,18 +98,15 @@ function AdminTrainers({ user, onLogout }) {
         throw new Error('Failed to approve trainer')
       }
       
-      const result = await response.json()
-      console.log('✅ Trainer approved:', result)
-      alert('Trainer approved successfully!')
-      fetchTrainers() // Refresh the list
+      await response.json()
+      fetchTrainers()
     } catch (err) {
-      console.error('Error approving trainer:', err)
-      alert('Failed to approve trainer. Please try again.')
+      setError('Failed to approve trainer. Please try again.')
     }
   }
 
   const handleReject = async (trainerId) => {
-    if (!window.confirm('Are you sure you want to reject this trainer?')) return
+    if (!window.confirm('Reject this trainer?')) return
     
     try {
       const response = await fetch(`http://localhost:8000/api/admin/reject-trainer/${trainerId}`, {
@@ -109,13 +120,10 @@ function AdminTrainers({ user, onLogout }) {
         throw new Error('Failed to reject trainer')
       }
       
-      const result = await response.json()
-      console.log('❌ Trainer rejected:', result)
-      alert('Trainer rejected!')
-      fetchTrainers() // Refresh the list
+      await response.json()
+      fetchTrainers()
     } catch (err) {
-      console.error('Error rejecting trainer:', err)
-      alert('Failed to reject trainer. Please try again.')
+      setError('Failed to reject trainer. Please try again.')
     }
   }
 
@@ -133,13 +141,48 @@ function AdminTrainers({ user, onLogout }) {
     navigate('/admin-dashboard')
   }
 
-  const getStatusBadge = (trainer) => {
-    if (trainer.is_approved) {
-      return <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700 font-medium">Approved</span>
-    } else if (trainer.status === 'rejected') {
-      return <span className="px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700 font-medium">Rejected</span>
+  const getRoleBadge = (role) => {
+    if (role === 'member') {
+      return <span className="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700 font-medium">Member</span>
+    } else if (role === 'trainer') {
+      return <span className="px-2 py-0.5 rounded-full text-xs bg-purple-100 text-purple-700 font-medium">Trainer</span>
     } else {
-      return <span className="px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-700 font-medium">Pending</span>
+      return <span className="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600 font-medium">N/A</span>
+    }
+  }
+
+  const getCategoryBadge = (category) => {
+    if (category === 'regular') {
+      return <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700 font-medium">Regular</span>
+    } else if (category === 'personalized') {
+      return <span className="px-2 py-0.5 rounded-full text-xs bg-pink-100 text-pink-700 font-medium">Personalized</span>
+    } else {
+      return <span className="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600 font-medium">N/A</span>
+    }
+  }
+
+  const getActionButton = (trainer) => {
+    if (trainer.is_approved) {
+      return <span className="text-xs font-medium text-green-600 bg-green-50 px-3 py-1 rounded-full">Approved</span>
+    } else if (trainer.status === 'rejected') {
+      return <span className="text-xs font-medium text-red-600 bg-red-50 px-3 py-1 rounded-full">Rejected</span>
+    } else {
+      return (
+        <div className="flex gap-2">
+          <button
+            onClick={() => handleApprove(trainer.id)}
+            className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-medium rounded-lg transition"
+          >
+            Approve
+          </button>
+          <button
+            onClick={() => handleReject(trainer.id)}
+            className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-medium rounded-lg transition"
+          >
+            Reject
+          </button>
+        </div>
+      )
     }
   }
 
@@ -165,7 +208,7 @@ function AdminTrainers({ user, onLogout }) {
         <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Trainer Management</h1>
-            <p className="text-gray-500">View and manage all trainers</p>
+            <p className="text-gray-500">View and manage all trainers and members</p>
           </div>
           <button
             onClick={handleBack}
@@ -188,9 +231,9 @@ function AdminTrainers({ user, onLogout }) {
         )}
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
-            <p className="text-sm text-gray-500">Total Trainers</p>
+            <p className="text-sm text-gray-500">Total</p>
             <p className="text-2xl font-bold text-blue-600">{stats.total}</p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
@@ -200,6 +243,26 @@ function AdminTrainers({ user, onLogout }) {
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
             <p className="text-sm text-gray-500">Pending</p>
             <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
+            <p className="text-sm text-gray-500">Members</p>
+            <p className="text-2xl font-bold text-blue-600">{stats.members}</p>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
+            <p className="text-sm text-gray-500">Trainers</p>
+            <p className="text-2xl font-bold text-purple-600">{stats.trainers}</p>
+          </div>
+        </div>
+
+        {/* Additional Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
+            <p className="text-sm text-gray-500">Regular Trainers</p>
+            <p className="text-2xl font-bold text-green-600">{stats.regular}</p>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
+            <p className="text-sm text-gray-500">Personalized Trainers</p>
+            <p className="text-2xl font-bold text-pink-600">{stats.personalized}</p>
           </div>
         </div>
 
@@ -211,7 +274,7 @@ function AdminTrainers({ user, onLogout }) {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by name, email, phone, ID, or specialty..."
+              placeholder="Search by name, email, phone, ID, role, category, or specialty..."
               className="flex-1 min-w-[200px] px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <span className="text-sm text-gray-500">
@@ -236,10 +299,10 @@ function AdminTrainers({ user, onLogout }) {
                     <th className="px-4 py-3 text-sm font-medium text-gray-600">Name</th>
                     <th className="px-4 py-3 text-sm font-medium text-gray-600">Email</th>
                     <th className="px-4 py-3 text-sm font-medium text-gray-600">Phone</th>
+                    <th className="px-4 py-3 text-sm font-medium text-gray-600">Role</th>
+                    <th className="px-4 py-3 text-sm font-medium text-gray-600">Category</th>
                     <th className="px-4 py-3 text-sm font-medium text-gray-600">Specialty</th>
-                    <th className="px-4 py-3 text-sm font-medium text-gray-600">Status</th>
-                    <th className="px-4 py-3 text-sm font-medium text-gray-600">Approve</th>
-                    <th className="px-4 py-3 text-sm font-medium text-gray-600">Reject</th>
+                    <th className="px-4 py-3 text-sm font-medium text-gray-600">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -254,37 +317,19 @@ function AdminTrainers({ user, onLogout }) {
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600 break-all">{trainer.email || 'N/A'}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{trainer.phone || 'N/A'}</td>
+                      <td className="px-4 py-3 text-sm">
+                        {getRoleBadge(trainer.role)}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {getCategoryBadge(trainer.category)}
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
                         <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
                           {trainer.specialty || 'N/A'}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        {getStatusBadge(trainer)}
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        {!trainer.is_approved && trainer.status !== 'rejected' ? (
-                          <button
-                            onClick={() => handleApprove(trainer.id)}
-                            className="w-20 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-medium rounded-lg transition"
-                          >
-                            Approve
-                          </button>
-                        ) : (
-                          <span className="text-gray-400 text-xs">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        {!trainer.is_approved && trainer.status !== 'rejected' ? (
-                          <button
-                            onClick={() => handleReject(trainer.id)}
-                            className="w-20 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-medium rounded-lg transition"
-                          >
-                            Reject
-                          </button>
-                        ) : (
-                          <span className="text-gray-400 text-xs">—</span>
-                        )}
+                        {getActionButton(trainer)}
                       </td>
                     </tr>
                   ))}
@@ -331,6 +376,16 @@ function AdminTrainers({ user, onLogout }) {
                   <label className="text-sm font-medium text-gray-500">Phone</label>
                   <p className="text-lg text-gray-900">{selectedTrainer.phone || 'N/A'}</p>
                 </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Role</label>
+                    <div className="mt-1">{getRoleBadge(selectedTrainer.role)}</div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Category</label>
+                    <div className="mt-1">{getCategoryBadge(selectedTrainer.category)}</div>
+                  </div>
+                </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Specialty</label>
                   <p className="text-lg text-gray-900">
@@ -349,7 +404,15 @@ function AdminTrainers({ user, onLogout }) {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Status</label>
-                  <div className="mt-1">{getStatusBadge(selectedTrainer)}</div>
+                  <div className="mt-1">
+                    {selectedTrainer.is_approved ? (
+                      <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700 font-medium">Approved</span>
+                    ) : selectedTrainer.status === 'rejected' ? (
+                      <span className="px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700 font-medium">Rejected</span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-700 font-medium">Pending</span>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Registered On</label>

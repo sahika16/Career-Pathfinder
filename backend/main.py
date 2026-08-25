@@ -1,8 +1,11 @@
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 import pdfplumber
 import io
+import shutil
+import os
 from datetime import datetime, timezone
 from pydantic import BaseModel
 from typing import List, Optional
@@ -29,11 +32,9 @@ import bcrypt
 
 load_dotenv()
 
-# ====== SMTP CREDENTIALS ======
 SMTP_EMAIL = os.getenv("SMTP_EMAIL")
 SMTP_APP_PASSWORD = os.getenv("SMTP_APP_PASSWORD")
 
-# ====== TWILIO CREDENTIALS ======
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
@@ -41,10 +42,11 @@ TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 ADMIN_PASSWORD_HASH = os.getenv("ADMIN_PASSWORD_HASH")
 
-# ====== DATABASE URL ======
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Create database tables
+if not os.path.exists("uploads"):
+    os.makedirs("uploads")
+
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Career Pathfinder API")
@@ -57,7 +59,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ====== Request Models ======
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 class SkillUpdate(BaseModel):
     skill_name: Optional[str] = None
     rating: Optional[int] = None
@@ -83,6 +86,8 @@ class TrainerRegister(BaseModel):
     education: str
     experience: str
     specialty: str
+    role: str = "trainer"
+    category: str = "regular"
     password: str
 
 class TrainerLogin(BaseModel):
@@ -93,7 +98,18 @@ class AdminLogin(BaseModel):
     email: str
     password: str
 
-# ====== Helper Functions ======
+class TrainerSettingsUpdate(BaseModel):
+    available_days: Optional[List[str]] = []
+    available_time_start: Optional[str] = None
+    available_time_end: Optional[str] = None
+    break_start: Optional[str] = None
+    break_end: Optional[str] = None
+    about: Optional[str] = ""
+    expertise: Optional[str] = ""
+    qualifications: Optional[str] = ""
+    hourly_rate: Optional[str] = ""
+    skills_taught: Optional[str] = ""
+
 def extract_pdf_text(file_content: bytes) -> str:
     try:
         with pdfplumber.open(io.BytesIO(file_content)) as pdf:
@@ -106,7 +122,6 @@ def extract_pdf_text(file_content: bytes) -> str:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error extracting PDF text: {str(e)}")
 
-# ====== PHONE NUMBER CLEANING FUNCTION ======
 def clean_phone_number(phone: str) -> str:
     if not phone:
         return ""
@@ -155,7 +170,6 @@ def find_resume_by_phone(phone: str, db: Session):
     
     return None
 
-# ====== TWILIO OTP SENDING FUNCTION ======
 def send_otp_sms(phone_number: str, otp: str, name: str = "Student"):
     try:
         phone_number = clean_phone_number(phone_number)
@@ -182,7 +196,6 @@ def send_otp_sms(phone_number: str, otp: str, name: str = "Student"):
         print(f"❌ SMS Error: {str(e)}")
         return False, str(e)
 
-# ====== SMTP EMAIL OTP FUNCTION ======
 def send_otp_email(email: str, otp: str, name: str = "Student"):
     try:
         html_content = f"""
@@ -217,14 +230,13 @@ def send_otp_email(email: str, otp: str, name: str = "Student"):
         server.send_message(msg)
         server.quit()
         
-        print(f"📧 Email OTP sent to {email}")
+        print(f"📧 Email OTP sent to {email}")  
         return True, "Email sent successfully"
         
     except Exception as e:
         print(f"❌ Email Error: {str(e)}")
         return False, str(e)
 
-# ====== UPLOAD RESUME (STUDENTS ONLY) ======
 @app.post("/api/upload-resume")
 async def upload_resume(
     file: UploadFile = File(...),
@@ -271,7 +283,6 @@ async def upload_resume(
         db.flush()
         
         all_skills = parsed_data.get('skills', [])
-        #print(f" Found {len(all_skills)} skills: {all_skills}")
         
         for skill_name in all_skills:
             skill = models.Skill(
@@ -298,7 +309,6 @@ async def upload_resume(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
-# ====== GET ALL STUDENTS ======
 @app.get("/api/resumes")
 def get_all_resumes(db: Session = Depends(get_db)):
     resumes = db.query(models.Resume).order_by(models.Resume.uploaded_at.desc()).all()
@@ -320,8 +330,7 @@ def get_all_resumes(db: Session = Depends(get_db)):
         })
     return result
 
-# ====== GET SKILLS FOR A STUDENT ======
-@app.get("/api/skills/{resume_id}")
+@app.get("/api/skills/{resume_id}")  
 def get_skills(resume_id: int, db: Session = Depends(get_db)):
     skills = db.query(models.Skill).filter(models.Skill.resume_id == resume_id).all()
     
@@ -336,7 +345,6 @@ def get_skills(resume_id: int, db: Session = Depends(get_db)):
         for s in skills
     ]
 
-# ====== GET CONCEPT SKILLS ======
 @app.get("/api/concept-skills/{resume_id}")
 def get_concept_skills(resume_id: int, db: Session = Depends(get_db)):
     concepts = db.query(models.ConceptSkill).filter(models.ConceptSkill.resume_id == resume_id).all()
@@ -351,7 +359,6 @@ def get_concept_skills(resume_id: int, db: Session = Depends(get_db)):
         for c in concepts
     ]
 
-# ====== UPDATE A SKILL ======
 @app.put("/api/skills/{skill_id}")
 def update_skill(skill_id: int, skill_data: SkillUpdate, db: Session = Depends(get_db)):
     skill = db.query(models.Skill).filter(models.Skill.id == skill_id).first()
@@ -381,7 +388,6 @@ def update_skill(skill_id: int, skill_data: SkillUpdate, db: Session = Depends(g
         "is_core": skill.is_core
     }
 
-# ====== ADD A SKILL ======
 @app.post("/api/skills/{resume_id}")
 def add_skill(resume_id: int, skill_data: SkillCreate, db: Session = Depends(get_db)):
     resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
@@ -411,7 +417,6 @@ def add_skill(resume_id: int, skill_data: SkillCreate, db: Session = Depends(get
         "skill_name": new_skill.skill_name
     }
 
-# ====== DELETE A SKILL ======
 @app.delete("/api/skills/{skill_id}")
 def delete_skill(skill_id: int, db: Session = Depends(get_db)):
     skill = db.query(models.Skill).filter(models.Skill.id == skill_id).first()
@@ -422,7 +427,6 @@ def delete_skill(skill_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Skill deleted"}
 
-# ====== UPDATE ALL RATINGS ======
 @app.put("/api/skills/{resume_id}/ratings")
 def update_ratings(resume_id: int, ratings: List[RatingUpdate], db: Session = Depends(get_db)):
     for rating_data in ratings:
@@ -442,7 +446,6 @@ def update_ratings(resume_id: int, ratings: List[RatingUpdate], db: Session = De
     db.commit()
     return {"message": "Ratings updated"}
 
-# ====== UPDATE CONCEPT SKILL RATING ======
 @app.put("/api/concept-skills/{concept_id}")
 def update_concept_skill(concept_id: int, skill_data: SkillUpdate, db: Session = Depends(get_db)):
     concept = db.query(models.ConceptSkill).filter(models.ConceptSkill.id == concept_id).first()
@@ -468,7 +471,6 @@ def update_concept_skill(concept_id: int, skill_data: SkillUpdate, db: Session =
         "rating_level": concept.rating_level
     }
 
-# ====== UPDATE ALL CONCEPT RATINGS ======
 @app.put("/api/concept-skills/{resume_id}/ratings")
 def update_concept_ratings(resume_id: int, ratings: List[RatingUpdate], db: Session = Depends(get_db)):
     for rating_data in ratings:
@@ -488,7 +490,6 @@ def update_concept_ratings(resume_id: int, ratings: List[RatingUpdate], db: Sess
     db.commit()
     return {"message": "Concept ratings updated"}
 
-# ====== UPDATE RESUME STATUS (STUDENT) ======
 @app.put("/api/resume/{resume_id}/status")
 def update_resume_status(resume_id: int, status_data: StatusUpdate, db: Session = Depends(get_db)):
     resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
@@ -508,8 +509,6 @@ def update_resume_status(resume_id: int, status_data: StatusUpdate, db: Session 
     
     db.commit()
     return {"message": "Status updated"}
-
-# ====== STUDENT OTP LOGIN ENDPOINTS ======
 
 @app.post("/api/login/send-otp")
 def send_login_otp(login_data: dict, db: Session = Depends(get_db)):
@@ -564,7 +563,7 @@ def send_login_otp(login_data: dict, db: Session = Depends(get_db)):
             "expires_in": "5 minutes"
         }
     else:
-        print(f"⚠️ OTP sending failed. OTP for testing: {otp}")
+        print(f"⚠️ OTP sending failed. OTP for testing: {otp}")  
         return {
             "message": "OTP generated but sending failed. Check logs.",
             "otp": otp,
@@ -667,7 +666,6 @@ def get_user_progress(resume_id: int, db: Session = Depends(get_db)):
         "rated_concepts": rated_concepts
     }
 
-# ====== TRAINER REGISTRATION ======
 @app.post("/api/trainer/register")
 def register_trainer(trainer_data: TrainerRegister, db: Session = Depends(get_db)):
     existing_trainer = db.query(models.Trainer).filter(models.Trainer.email == trainer_data.email).first()
@@ -676,16 +674,17 @@ def register_trainer(trainer_data: TrainerRegister, db: Session = Depends(get_db
     
     existing_student = db.query(models.Resume).filter(models.Resume.email == trainer_data.email).first()
     if existing_student:
-        raise HTTPException(status_code=400, detail="Email already registered as student")
+        print(f"⚠️ Email {trainer_data.email} is also a student, proceeding with trainer registration")
     
     hashed_password = bcrypt.hashpw(trainer_data.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     
-    # Create trainer in the dedicated trainers table
     trainer = models.Trainer(
         name=trainer_data.name,
         email=trainer_data.email,
         phone=trainer_data.phone,
         password=hashed_password,
+        role=trainer_data.role,
+        category=trainer_data.category,
         specialty=trainer_data.specialty,
         experience=trainer_data.experience,
         education=trainer_data.education,
@@ -697,20 +696,18 @@ def register_trainer(trainer_data: TrainerRegister, db: Session = Depends(get_db
     db.commit()
     db.refresh(trainer)
     
-    #print(f"✅ Trainer registered in trainers table: {trainer.name} (ID: {trainer.id})")
-    
     return {
         "message": "Trainer registered successfully. Please wait for admin approval.",
         "id": trainer.id,
         "name": trainer.name,
         "email": trainer.email,
-        "role": "trainer",
+        "role": trainer.role,
+        "category": trainer.category,
         "status": trainer.status
     }
 
 @app.post("/api/login/trainer")
 def login_trainer(login_data: TrainerLogin, db: Session = Depends(get_db)):
-    # Query from trainers table
     trainer = db.query(models.Trainer).filter(
         models.Trainer.email == login_data.email
     ).first()
@@ -729,8 +726,466 @@ def login_trainer(login_data: TrainerLogin, db: Session = Depends(get_db)):
         "id": trainer.id,
         "name": trainer.name,
         "email": trainer.email,
-        "role": "trainer",
+        "role": trainer.role,
+        "category": trainer.category,
         "is_approved": trainer.is_approved
+    }
+
+@app.get("/api/trainer/settings/{trainer_id}")
+def get_trainer_settings(trainer_id: int, db: Session = Depends(get_db)):
+    trainer = db.query(models.Trainer).filter(models.Trainer.id == trainer_id).first()
+    if not trainer:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    
+    return {
+        "available_days": trainer.available_days or [],
+        "available_time_start": trainer.available_time_start or "",
+        "available_time_end": trainer.available_time_end or "",
+        "break_start": trainer.break_start or "",
+        "break_end": trainer.break_end or "",
+        "about": trainer.about or "",
+        "expertise": trainer.expertise or "",
+        "qualifications": trainer.qualifications or "",
+        "hourly_rate": trainer.hourly_rate or "",
+        "skills_taught": trainer.skills_taught or ""
+    }
+
+@app.put("/api/trainer/settings/{trainer_id}")
+def update_trainer_settings(trainer_id: int, settings: TrainerSettingsUpdate, db: Session = Depends(get_db)):
+    trainer = db.query(models.Trainer).filter(models.Trainer.id == trainer_id).first()
+    if not trainer:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    
+    if settings.available_days is not None:
+        trainer.available_days = settings.available_days
+    if settings.available_time_start is not None:
+        trainer.available_time_start = settings.available_time_start
+    if settings.available_time_end is not None:
+        trainer.available_time_end = settings.available_time_end
+    if settings.break_start is not None:
+        trainer.break_start = settings.break_start
+    if settings.break_end is not None:
+        trainer.break_end = settings.break_end
+    if settings.about is not None:
+        trainer.about = settings.about
+    if settings.expertise is not None:
+        trainer.expertise = settings.expertise
+    if settings.qualifications is not None:
+        trainer.qualifications = settings.qualifications
+    if settings.hourly_rate is not None:
+        trainer.hourly_rate = settings.hourly_rate
+    if settings.skills_taught is not None:
+        trainer.skills_taught = settings.skills_taught
+    
+    db.commit()
+    db.refresh(trainer)
+    
+    return {
+        "message": "Settings updated successfully",
+        "available_days": trainer.available_days,
+        "available_time_start": trainer.available_time_start,
+        "available_time_end": trainer.available_time_end,
+        "break_start": trainer.break_start,
+        "break_end": trainer.break_end,
+        "about": trainer.about,
+        "expertise": trainer.expertise,
+        "qualifications": trainer.qualifications,
+        "hourly_rate": trainer.hourly_rate,
+        "skills_taught": trainer.skills_taught
+    }
+
+@app.post("/api/trainer/video")
+def add_trainer_video(video_data: dict, db: Session = Depends(get_db)):
+    trainer_id = video_data.get('trainer_id')
+    title = video_data.get('title')
+    description = video_data.get('description')
+    category = video_data.get('category')
+    duration = video_data.get('duration')
+    video_url = video_data.get('video_url')
+    
+    if not trainer_id or not title:
+        raise HTTPException(status_code=400, detail="trainer_id and title are required")
+    
+    trainer = db.query(models.Trainer).filter(models.Trainer.id == trainer_id).first()
+    if not trainer:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    
+    new_video = models.TrainerContent(
+        trainer_id=trainer_id,
+        title=title,
+        description=description,
+        content_type='video',
+        content_url=video_url,
+        skill_name=category,
+        difficulty='Beginner'
+    )
+    
+    db.add(new_video)
+    db.commit()
+    db.refresh(new_video)
+    
+    return {"message": "Video added successfully", "id": new_video.id}
+
+@app.get("/api/trainer/videos/{trainer_id}")
+def get_trainer_videos(trainer_id: int, db: Session = Depends(get_db)):
+    videos = db.query(models.TrainerContent).filter(
+        models.TrainerContent.trainer_id == trainer_id,
+        models.TrainerContent.content_type == 'video'
+    ).order_by(models.TrainerContent.created_at.desc()).all()
+    
+    return [
+        {
+            "id": v.id,
+            "title": v.title,
+            "description": v.description,
+            "category": v.skill_name,
+            "duration": "N/A",
+            "video_url": v.content_url,
+            "views": 0,
+            "created_at": v.created_at
+        }
+        for v in videos
+    ]
+
+@app.delete("/api/trainer/video/{video_id}")
+def delete_trainer_video(video_id: int, db: Session = Depends(get_db)):
+    video = db.query(models.TrainerContent).filter(
+        models.TrainerContent.id == video_id
+    ).first()
+    
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    
+    db.delete(video)
+    db.commit()
+    
+    return {"message": "Video deleted successfully"}
+
+@app.post("/api/member/upload")
+async def upload_file(file: UploadFile = File(...), trainer_id: int = None):
+    try:
+        upload_dir = "uploads"
+        if not os.path.exists(upload_dir):
+            os.makedirs(upload_dir)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_filename = file.filename.replace(" ", "_")
+        filename = f"{timestamp}_{safe_filename}"
+        file_path = os.path.join(upload_dir, filename)
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        url = f"http://localhost:8000/uploads/{filename}"
+        
+        return {
+            "url": url,
+            "filename": filename,
+            "size": os.path.getsize(file_path)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+@app.post("/api/member/content")
+def add_content(content_data: dict, db: Session = Depends(get_db)):
+    trainer_id = content_data.get('trainer_id')
+    title = content_data.get('title')
+    description = content_data.get('description')
+    content_type = content_data.get('content_type', 'video')
+    content_url = content_data.get('content_url')
+    skill_name = content_data.get('skill_name')
+    difficulty = content_data.get('difficulty')
+    
+    if not trainer_id or not title:
+        raise HTTPException(status_code=400, detail="trainer_id and title are required")
+    
+    trainer = db.query(models.Trainer).filter(models.Trainer.id == trainer_id).first()
+    if not trainer:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    
+    new_content = models.TrainerContent(
+        trainer_id=trainer_id,
+        title=title,
+        description=description,
+        content_type=content_type,
+        content_url=content_url,
+        skill_name=skill_name,
+        difficulty=difficulty
+    )
+    
+    db.add(new_content)
+    db.commit()
+    db.refresh(new_content)
+    
+    return {"message": "Content added successfully", "id": new_content.id}
+
+@app.get("/api/member/contents/{trainer_id}")
+def get_contents(trainer_id: int, db: Session = Depends(get_db)):
+    contents = db.query(models.TrainerContent).filter(
+        models.TrainerContent.trainer_id == trainer_id
+    ).order_by(models.TrainerContent.created_at.desc()).all()
+    
+    return [
+        {
+            "id": c.id,
+            "title": c.title,
+            "description": c.description,
+            "content_type": c.content_type,
+            "content_url": c.content_url,
+            "skill_name": c.skill_name,
+            "difficulty": c.difficulty,
+            "created_at": c.created_at
+        }
+        for c in contents
+    ]
+
+@app.delete("/api/member/content/{content_id}")
+def delete_content(content_id: int, db: Session = Depends(get_db)):
+    content = db.query(models.TrainerContent).filter(
+        models.TrainerContent.id == content_id
+    ).first()
+    
+    if not content:
+        raise HTTPException(status_code=404, detail="Content not found")
+    
+    db.delete(content)
+    db.commit()
+    
+    return {"message": "Content deleted successfully"}
+
+@app.post("/api/trainer/session")
+def add_session(session_data: dict, db: Session = Depends(get_db)):
+    trainer_id = session_data.get('trainer_id')
+    title = session_data.get('title')
+    description = session_data.get('description')
+    session_date = session_data.get('session_date')
+    start_time = session_data.get('start_time')
+    end_time = session_data.get('end_time')
+    duration_minutes = session_data.get('duration_minutes', 60)
+    max_students = session_data.get('max_students', 10)
+    price = session_data.get('price', 0)
+    category = session_data.get('category')
+    level = session_data.get('level')
+    meeting_link = session_data.get('meeting_link')
+    
+    if not trainer_id or not title:
+        raise HTTPException(status_code=400, detail="trainer_id and title are required")
+    
+    trainer = db.query(models.Trainer).filter(models.Trainer.id == trainer_id).first()
+    if not trainer:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    
+    if session_date and start_time and end_time:
+        try:
+            session_datetime = datetime.strptime(f"{session_date} {start_time}", "%Y-%m-%d %H:%M")
+            end_datetime = datetime.strptime(f"{session_date} {end_time}", "%Y-%m-%d %H:%M")
+            duration_minutes = int((end_datetime - session_datetime).total_seconds() / 60)
+        except:
+            pass
+    
+    new_session = models.TrainerSession(
+        trainer_id=trainer_id,
+        title=title,
+        description=description,
+        session_date=datetime.fromisoformat(session_date) if session_date else None,
+        duration_minutes=duration_minutes,
+        max_students=max_students,
+        status="scheduled",
+        enrolled_count=0,
+        price=price,
+        category=category,
+        level=level,
+        meeting_link=meeting_link
+    )
+    
+    db.add(new_session)
+    db.commit()
+    db.refresh(new_session)
+    
+    return {"message": "Session scheduled successfully", "id": new_session.id}
+
+@app.get("/api/trainer/sessions/{trainer_id}")
+def get_sessions(trainer_id: int, db: Session = Depends(get_db)):
+    sessions = db.query(models.TrainerSession).filter(
+        models.TrainerSession.trainer_id == trainer_id
+    ).order_by(models.TrainerSession.session_date.desc()).all()
+    
+    return [
+        {
+            "id": s.id,
+            "title": s.title,
+            "description": s.description,
+            "session_date": s.session_date,
+            "duration_minutes": s.duration_minutes,
+            "max_students": s.max_students,
+            "enrolled_count": s.enrolled_count,
+            "status": s.status,
+            "price": s.price,
+            "category": s.category,
+            "level": s.level,
+            "meeting_link": s.meeting_link,
+            "created_at": s.created_at
+        }
+        for s in sessions
+    ]
+
+@app.delete("/api/trainer/session/{session_id}")
+def delete_session(session_id: int, db: Session = Depends(get_db)):
+    session = db.query(models.TrainerSession).filter(
+        models.TrainerSession.id == session_id
+    ).first()
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    db.delete(session)
+    db.commit()
+    
+    return {"message": "Session deleted successfully"}
+
+@app.post("/api/trainer/personalized/assign")
+def assign_coaching(coaching_data: dict, db: Session = Depends(get_db)):
+    trainer_id = coaching_data.get('trainer_id')
+    student_id = coaching_data.get('student_id')
+    student_name = coaching_data.get('student_name')
+    student_email = coaching_data.get('student_email')
+    skill_name = coaching_data.get('skill_name')
+    current_level = coaching_data.get('current_level', 'Basic')
+    target_level = coaching_data.get('target_level', 'Intermediate')
+    total_sessions = coaching_data.get('total_sessions', 5)
+    notes = coaching_data.get('notes')
+    
+    if not trainer_id or not student_id:
+        raise HTTPException(status_code=400, detail="trainer_id and student_id are required")
+    
+    trainer = db.query(models.Trainer).filter(models.Trainer.id == trainer_id).first()
+    if not trainer:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    
+    student = db.query(models.Resume).filter(models.Resume.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    existing = db.query(models.PersonalizedCoaching).filter(
+        models.PersonalizedCoaching.trainer_id == trainer_id,
+        models.PersonalizedCoaching.student_id == student_id,
+        models.PersonalizedCoaching.status.in_(['pending', 'active'])
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="Student already assigned")
+    
+    new_coaching = models.PersonalizedCoaching(
+        trainer_id=trainer_id,
+        student_id=student_id,
+        student_name=student_name or student.name,
+        student_email=student_email or student.email,
+        skill_name=skill_name,
+        current_level=current_level,
+        target_level=target_level,
+        total_sessions=total_sessions,
+        notes=notes,
+        status="pending"
+    )
+    
+    db.add(new_coaching)
+    db.commit()
+    db.refresh(new_coaching)
+    
+    return {"message": "Student assigned successfully", "id": new_coaching.id}
+
+@app.get("/api/trainer/personalized/students/{trainer_id}")
+def get_personalized_students(trainer_id: int, db: Session = Depends(get_db)):
+    coachings = db.query(models.PersonalizedCoaching).filter(
+        models.PersonalizedCoaching.trainer_id == trainer_id
+    ).order_by(models.PersonalizedCoaching.created_at.desc()).all()
+    
+    return [
+        {
+            "id": c.id,
+            "student_id": c.student_id,
+            "student_name": c.student_name,
+            "student_email": c.student_email,
+            "skill_name": c.skill_name,
+            "current_level": c.current_level,
+            "target_level": c.target_level,
+            "status": c.status,
+            "session_count": c.session_count,
+            "total_sessions": c.total_sessions,
+            "notes": c.notes,
+            "created_at": c.created_at
+        }
+        for c in coachings
+    ]
+
+@app.put("/api/trainer/personalized/status/{coaching_id}")
+def update_coaching_status(coaching_id: int, status_data: dict, db: Session = Depends(get_db)):
+    coaching = db.query(models.PersonalizedCoaching).filter(
+        models.PersonalizedCoaching.id == coaching_id
+    ).first()
+    
+    if not coaching:
+        raise HTTPException(status_code=404, detail="Coaching not found")
+    
+    new_status = status_data.get('status')
+    if new_status:
+        coaching.status = new_status
+        if new_status == 'active':
+            coaching.session_count = coaching.session_count + 1
+    
+    db.commit()
+    db.refresh(coaching)
+    
+    return {"message": "Status updated successfully"}
+
+@app.put("/api/trainer/personalized/session/{coaching_id}")
+def increment_session(coaching_id: int, db: Session = Depends(get_db)):
+    coaching = db.query(models.PersonalizedCoaching).filter(
+        models.PersonalizedCoaching.id == coaching_id
+    ).first()
+    
+    if not coaching:
+        raise HTTPException(status_code=404, detail="Coaching not found")
+    
+    coaching.session_count = coaching.session_count + 1
+    
+    if coaching.session_count >= coaching.total_sessions:
+        coaching.status = 'completed'
+    
+    db.commit()
+    db.refresh(coaching)
+    
+    return {"message": "Session count updated"}
+
+@app.delete("/api/trainer/personalized/coaching/{coaching_id}")
+def delete_coaching(coaching_id: int, db: Session = Depends(get_db)):
+    coaching = db.query(models.PersonalizedCoaching).filter(
+        models.PersonalizedCoaching.id == coaching_id
+    ).first()
+    
+    if not coaching:
+        raise HTTPException(status_code=404, detail="Coaching not found")
+    
+    db.delete(coaching)
+    db.commit()
+    
+    return {"message": "Coaching deleted successfully"}
+
+@app.get("/api/student/find/{email}")
+def find_student_by_email(email: str, db: Session = Depends(get_db)):
+    student = db.query(models.Resume).filter(
+        models.Resume.email == email
+    ).first()
+    
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    return {
+        "id": student.id,
+        "name": student.name,
+        "email": student.email,
+        "phone": student.phone
     }
 
 @app.post("/api/login/admin")
@@ -748,10 +1203,8 @@ def login_admin(login_data: AdminLogin):
         "role": "admin"
     }
 
-# ====== ADMIN: Get All Students ======
 @app.get("/api/admin/students")
 def get_all_students(db: Session = Depends(get_db)):
-    """Get ONLY students from resumes table"""
     students = db.query(models.Resume).order_by(models.Resume.uploaded_at.desc()).all()
     
     result = []
@@ -770,16 +1223,11 @@ def get_all_students(db: Session = Depends(get_db)):
             "status": student.status
         })
     
-    #print(f" Found {len(result)} students")
     return result
 
-# ====== ADMIN: Get All Trainers ======
 @app.get("/api/admin/trainers")
 def get_all_trainers(db: Session = Depends(get_db)):
-    """Get ONLY trainers from trainers table"""
     trainers = db.query(models.Trainer).order_by(models.Trainer.created_at.desc()).all()
-    
-    #print(f"📊 Found {len(trainers)} trainers in trainers table")
     
     return [
         {
@@ -787,6 +1235,8 @@ def get_all_trainers(db: Session = Depends(get_db)):
             "name": t.name,
             "email": t.email,
             "phone": t.phone,
+            "role": t.role,
+            "category": t.category,
             "education": t.education,
             "experience": t.experience,
             "specialty": t.specialty,
@@ -797,10 +1247,8 @@ def get_all_trainers(db: Session = Depends(get_db)):
         for t in trainers
     ]
 
-# ====== ADMIN: Get Pending Trainers ======
 @app.get("/api/admin/pending-trainers")
 def get_pending_trainers(db: Session = Depends(get_db)):
-    """Get pending trainers from trainers table"""
     trainers = db.query(models.Trainer).filter(
         models.Trainer.is_approved == False,
         models.Trainer.status == 'pending_approval'
@@ -820,10 +1268,8 @@ def get_pending_trainers(db: Session = Depends(get_db)):
         for t in trainers
     ]
 
-# ====== ADMIN: Approve Trainer ======
 @app.put("/api/admin/approve-trainer/{trainer_id}")
 def approve_trainer(trainer_id: int, db: Session = Depends(get_db)):
-    """Approve trainer in trainers table"""
     trainer = db.query(models.Trainer).filter(
         models.Trainer.id == trainer_id
     ).first()
@@ -838,8 +1284,6 @@ def approve_trainer(trainer_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(trainer)
     
-    #print(f"✅ Trainer approved: {trainer.name} (ID: {trainer.id})")
-    
     return {
         "message": "Trainer approved successfully",
         "id": trainer.id,
@@ -847,10 +1291,8 @@ def approve_trainer(trainer_id: int, db: Session = Depends(get_db)):
         "is_approved": trainer.is_approved
     }
 
-# ====== ADMIN: Reject Trainer ======
 @app.put("/api/admin/reject-trainer/{trainer_id}")
 def reject_trainer(trainer_id: int, db: Session = Depends(get_db)):
-    """Reject trainer in trainers table"""
     trainer = db.query(models.Trainer).filter(
         models.Trainer.id == trainer_id
     ).first()
@@ -864,8 +1306,6 @@ def reject_trainer(trainer_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(trainer)
     
-    #print(f"❌ Trainer rejected: {trainer.name} (ID: {trainer.id})")
-    
     return {
         "message": "Trainer rejected",
         "id": trainer.id,
@@ -873,102 +1313,8 @@ def reject_trainer(trainer_id: int, db: Session = Depends(get_db)):
         "status": trainer.status
     }
 
-# ====== ADMIN: Get Single Trainer ======
-@app.get("/api/admin/trainer/{trainer_id}")
-def get_trainer(trainer_id: int, db: Session = Depends(get_db)):
-    """Get a single trainer by ID from trainers table"""
-    trainer = db.query(models.Trainer).filter(
-        models.Trainer.id == trainer_id
-    ).first()
-    
-    if not trainer:
-        raise HTTPException(status_code=404, detail="Trainer not found")
-    
-    return {
-        "id": trainer.id,
-        "name": trainer.name,
-        "email": trainer.email,
-        "phone": trainer.phone,
-        "education": trainer.education,
-        "experience": trainer.experience,
-        "specialty": trainer.specialty,
-        "is_approved": trainer.is_approved,
-        "status": trainer.status,
-        "created_at": trainer.created_at,
-        "updated_at": trainer.updated_at
-    }
-
-# ====== ADMIN: Update Trainer ======
-@app.put("/api/admin/trainer/{trainer_id}")
-def update_trainer(trainer_id: int, trainer_data: dict, db: Session = Depends(get_db)):
-    """Update trainer information in trainers table"""
-    trainer = db.query(models.Trainer).filter(
-        models.Trainer.id == trainer_id
-    ).first()
-    
-    if not trainer:
-        raise HTTPException(status_code=404, detail="Trainer not found")
-    
-    allowed_fields = ['name', 'phone', 'specialty', 'experience', 'education']
-    
-    for field in allowed_fields:
-        if field in trainer_data and trainer_data[field] is not None:
-            setattr(trainer, field, trainer_data[field])
-    
-    trainer.updated_at = datetime.now(timezone.utc)
-    
-    db.commit()
-    db.refresh(trainer)
-    
-    return {
-        "message": "Trainer updated successfully",
-        "id": trainer.id,
-        "name": trainer.name
-    }
-
-# ====== ADMIN: Delete Trainer ======
-@app.delete("/api/admin/trainer/{trainer_id}")
-def delete_trainer(trainer_id: int, db: Session = Depends(get_db)):
-    """Delete a trainer from trainers table"""
-    trainer = db.query(models.Trainer).filter(
-        models.Trainer.id == trainer_id
-    ).first()
-    
-    if not trainer:
-        raise HTTPException(status_code=404, detail="Trainer not found")
-    
-    db.delete(trainer)
-    db.commit()
-    
-    #print(f"🗑️ Trainer deleted: {trainer.name} (ID: {trainer.id})")
-    
-    return {"message": "Trainer deleted successfully"}
-
-# ====== TRAINER CHECK ENDPOINT ======
-@app.get("/api/trainer/check/{email}")
-def check_trainer_exists(email: str, db: Session = Depends(get_db)):
-    """Check if a trainer exists by email"""
-    trainer = db.query(models.Trainer).filter(
-        models.Trainer.email == email
-    ).first()
-    
-    if not trainer:
-        return {"exists": False}
-    
-    return {
-        "exists": True,
-        "id": trainer.id,
-        "name": trainer.name,
-        "email": trainer.email,
-        "is_approved": trainer.is_approved,
-        "status": trainer.status
-    }
-
-# ====== ASSESSMENT ENDPOINTS ======
-
 @app.get("/api/test/generate/{resume_id}/{skill_name}")
 def generate_test(resume_id: int, skill_name: str, db: Session = Depends(get_db)):
-    """Generate a test for a specific skill - NO DUPLICATES"""
     resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
     if not resume:
         raise HTTPException(status_code=404, detail="Student not found")
@@ -1104,8 +1450,6 @@ def get_all_test_results(resume_id: int, db: Session = Depends(get_db)):
         }
         for r in results
     ]
-
-# ====== ADMIN: Question Management ======
 
 @app.post("/api/admin/question")
 def add_question(question_data: dict, db: Session = Depends(get_db)):

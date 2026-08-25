@@ -12,6 +12,8 @@ function TrainerRegistration() {
     education: '',
     experience: '',
     specialty: '',
+    role: '', // 'member' or 'trainer'
+    category: '', // 'regular' or 'personalized'
     password: '',
     confirmPassword: ''
   })
@@ -20,9 +22,10 @@ function TrainerRegistration() {
   const [success, setSuccess] = useState(false)
 
   const handleChange = (e) => {
+    const { name, value } = e.target
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: value
     })
   }
 
@@ -34,22 +37,38 @@ function TrainerRegistration() {
       return
     }
 
+    if (!formData.role) {
+      setError('Please select a role')
+      return
+    }
+
+    if (formData.role === 'trainer' && !formData.category) {
+      setError('Please select a coaching category')
+      return
+    }
+
     try {
       setLoading(true)
       setError(null)
       
-      await axios.post('http://localhost:8000/api/trainer/register', {
+      const response = await axios.post('http://localhost:8000/api/trainer/register', {
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
         education: formData.education,
         experience: formData.experience,
         specialty: formData.specialty,
+        role: formData.role,
+        category: formData.category || 'regular',
         password: formData.password
       })
       
+      console.log('Registration response:', response.data)
+      
       setSuccess(true)
-      // Clear form fields
+      setLoading(false)
+      
+      // Clear form fields on success
       setFormData({
         name: '',
         email: '',
@@ -57,13 +76,15 @@ function TrainerRegistration() {
         education: '',
         experience: '',
         specialty: '',
+        role: '',
+        category: '',
         password: '',
         confirmPassword: ''
       })
       
     } catch (err) {
+      console.error('Registration error:', err)
       setError(err.response?.data?.detail || 'Registration failed. Please try again.')
-    } finally {
       setLoading(false)
     }
   }
@@ -87,13 +108,13 @@ function TrainerRegistration() {
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
           <div className="text-center mb-8">
             <div className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-1 rounded-full text-sm font-bold uppercase tracking-wider">
-              Trainer Registration
+              Registration
             </div>
             <h1 className="text-3xl font-extrabold text-gray-900 mt-4">
-              Become a Trainer
+              Join Our Team
             </h1>
             <p className="text-gray-600 mt-2">
-              And help students to grow.
+              Become a Member or Trainer to help students grow.
             </p>
           </div>
 
@@ -105,12 +126,15 @@ function TrainerRegistration() {
 
           {success && (
             <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-xl mb-4 text-sm">
-              Registration successful! Please wait for admin approval. 
+               Registration successful! Please wait for admin approval.
+              <br />
+              <span className="text-sm text-green-500">You can now login after admin approval.</span>
             </div>
           )}
 
           <form onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Full Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Full Name *
@@ -126,6 +150,7 @@ function TrainerRegistration() {
                 />
               </div>
 
+              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Email Address *
@@ -141,6 +166,7 @@ function TrainerRegistration() {
                 />
               </div>
 
+              {/* Phone */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Phone Number *
@@ -156,6 +182,7 @@ function TrainerRegistration() {
                 />
               </div>
 
+              {/* Education */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Education *
@@ -171,6 +198,7 @@ function TrainerRegistration() {
                 />
               </div>
 
+              {/* Experience */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Years of Experience *
@@ -186,6 +214,7 @@ function TrainerRegistration() {
                 />
               </div>
 
+              {/* Specialty */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Specialty / Expertise *
@@ -201,6 +230,45 @@ function TrainerRegistration() {
                 />
               </div>
 
+              {/* Role Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Role *
+                </label>
+                <select
+                  name="role"
+                  value={formData.role}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Select Role</option>
+                  <option value="member">Member</option>
+                  <option value="trainer">Trainer</option>
+                </select>
+              </div>
+
+              {/* Category Selection (Only for Trainers) */}
+              {formData.role === 'trainer' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Coaching Category *
+                  </label>
+                  <select
+                    name="category"
+                    value={formData.category}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Select Category</option>
+                    <option value="regular">Regular Coaching</option>
+                    <option value="personalized">Personalized Coaching</option>
+                  </select>
+                </div>
+              )}
+
+              {/* Password */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Password *
@@ -216,6 +284,7 @@ function TrainerRegistration() {
                 />
               </div>
 
+              {/* Confirm Password */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Confirm Password *
@@ -237,7 +306,7 @@ function TrainerRegistration() {
               disabled={loading || success}
               className="w-full mt-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-xl hover:shadow-lg transition font-bold disabled:opacity-50"
             >
-              {loading ? 'Registering...' : 'Register as Trainer'}
+              {loading ? 'Registering...' : 'Register'}
             </button>
           </form>
 

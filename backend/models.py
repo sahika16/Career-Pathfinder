@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, LargeBinary, Text, Float, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, LargeBinary, Text, Float, ForeignKey, Boolean, DECIMAL
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database import Base
@@ -41,6 +41,7 @@ class Resume(Base):
     skills = relationship("Skill", back_populates="resume", cascade="all, delete-orphan")
     concept_skills = relationship("ConceptSkill", back_populates="resume", cascade="all, delete-orphan")
     test_results = relationship("TestResult", back_populates="resume", cascade="all, delete-orphan")
+    coachings = relationship("PersonalizedCoaching", back_populates="student", cascade="all, delete-orphan")
 
 # ====== Trainer Table (Separate from Resumes) ======
 class Trainer(Base):
@@ -51,14 +52,35 @@ class Trainer(Base):
     email = Column(String(100), unique=True, nullable=False)
     phone = Column(String(20), nullable=True)
     password = Column(String(255), nullable=False)
+    role = Column(String(50), default="trainer")
+    category = Column(String(50), default="regular")
     specialty = Column(String(100), nullable=True)
     experience = Column(Text, nullable=True)
     education = Column(Text, nullable=True)
+    bio = Column(Text, nullable=True)
+    availability = Column(Text, nullable=True)
+    hourly_rate = Column(DECIMAL(10,2), nullable=True)
+    skills_taught = Column(Text, nullable=True)
+    rating = Column(DECIMAL(3,2), default=0)
     is_approved = Column(Boolean, default=False)
     status = Column(String(50), default="pending_approval")
     
+    # Trainer Settings Fields
+    available_days = Column(Text, nullable=True)  # JSON array of days
+    available_time_start = Column(String(10), nullable=True)
+    available_time_end = Column(String(10), nullable=True)
+    break_start = Column(String(10), nullable=True)
+    break_end = Column(String(10), nullable=True)
+    about = Column(Text, nullable=True)
+    expertise = Column(Text, nullable=True)
+    qualifications = Column(Text, nullable=True)
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    contents = relationship("TrainerContent", back_populates="trainer", cascade="all, delete-orphan")
+    sessions = relationship("TrainerSession", back_populates="trainer", cascade="all, delete-orphan")
+    coachings = relationship("PersonalizedCoaching", back_populates="trainer", cascade="all, delete-orphan")
 
 # ====== Skill Models ======
 class Skill(Base):
@@ -130,3 +152,66 @@ class TestSummary(Base):
     test_date = Column(DateTime(timezone=True), server_default=func.now())
     
     resume = relationship("Resume")
+
+# ====== Trainer Content Model ======
+class TrainerContent(Base):
+    __tablename__ = "trainer_contents"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    trainer_id = Column(Integer, ForeignKey("trainers.id"))
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    content_type = Column(String(50), default="video")
+    content_url = Column(Text, nullable=True)
+    skill_name = Column(String(100), nullable=True)
+    difficulty = Column(String(20), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    trainer = relationship("Trainer", back_populates="contents")
+
+# ====== Trainer Session Model (FIXED - Added missing fields) ======
+class TrainerSession(Base):
+    __tablename__ = "trainer_sessions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    trainer_id = Column(Integer, ForeignKey("trainers.id"))
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    session_date = Column(DateTime(timezone=True), nullable=True)
+    start_time = Column(String(10), nullable=True)
+    end_time = Column(String(10), nullable=True)
+    duration_minutes = Column(Integer, default=60)
+    max_students = Column(Integer, default=10)
+    enrolled_count = Column(Integer, default=0)
+    price = Column(DECIMAL(10,2), default=0)  # ADDED
+    category = Column(String(100), nullable=True)  # ADDED
+    level = Column(String(50), nullable=True)  # ADDED
+    meeting_link = Column(Text, nullable=True)  # ADDED
+    status = Column(String(50), default="scheduled")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    trainer = relationship("Trainer", back_populates="sessions")
+
+# ====== Personalized Coaching Model ======
+class PersonalizedCoaching(Base):
+    __tablename__ = "personalized_coachings"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    trainer_id = Column(Integer, ForeignKey("trainers.id"))
+    student_id = Column(Integer, ForeignKey("resumes.id"))
+    student_name = Column(String(100), nullable=True)
+    student_email = Column(String(100), nullable=True)
+    skill_name = Column(String(100), nullable=True)
+    current_level = Column(String(20), nullable=True)
+    target_level = Column(String(20), nullable=True)
+    status = Column(String(50), default="pending")
+    session_count = Column(Integer, default=0)
+    total_sessions = Column(Integer, default=5)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    trainer = relationship("Trainer", back_populates="coachings")
+    student = relationship("Resume", back_populates="coachings")

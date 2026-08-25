@@ -22,16 +22,12 @@ function TrainerLoginPage() {
       setLoading(true)
       setError(null)
       
-      console.log('Attempting trainer login with:', email)
-      
       const response = await axios.post('http://localhost:8000/api/login/trainer', {
         email: email.trim(),
         password: password
       })
       
       const data = response.data
-      
-      console.log('Trainer login response:', data)
       
       if (!data.is_approved) {
         setError('Your account is pending approval. Please wait for admin approval.')
@@ -43,16 +39,23 @@ function TrainerLoginPage() {
         id: data.id,
         name: data.name,
         email: data.email,
-        role: 'trainer',
+        role: data.role || 'trainer',
+        category: data.category || 'regular',
         is_approved: data.is_approved
       }
       
-      // Store in sessionStorage - only for this tab
+      // Store in sessionStorage
       sessionStorage.setItem('careerUser', JSON.stringify(userData))
       sessionStorage.setItem('careerLoginTime', Date.now().toString())
       
-      // Navigate to trainer dashboard
-      navigate('/trainer-dashboard')
+      // ====== REDIRECT BASED ON CATEGORY ======
+      if (userData.role === 'member') {
+        navigate('/member-dashboard')
+      } else if (userData.category === 'personalized') {
+        navigate('/personalized-dashboard')
+      } else {
+        navigate('/trainer-dashboard')
+      }
       
     } catch (err) {
       console.error('Login error:', err)

@@ -58,21 +58,30 @@ function ProfileDropdown({ user, onLogout }) {
             <p className="text-white/80 text-sm truncate">{user?.email || 'No email'}</p>
           </div>
 
+          {/* RESUME ID  - COMMENTED */}
+          {/*
           <div className="px-6 py-3 bg-gray-50 border-b border-gray-100 text-center">
             <p className="text-sm text-gray-500">
               <span className="font-medium text-gray-700">Resume ID:</span>{' '}
               <span className="font-semibold text-blue-600">#{user?.resumeId || 'N/A'}</span>
             </p>
           </div>
+          */}
 
-          <button onClick={handleDashboard} className="w-full px-6 py-3.5 text-left text-sm text-gray-700 hover:bg-blue-50 transition font-medium flex items-center space-x-3 border-b border-gray-100">
+          <button
+            onClick={handleDashboard}
+            className="w-full px-6 py-3.5 text-left text-sm text-gray-700 hover:bg-blue-50 transition font-medium flex items-center space-x-3 border-b border-gray-100"
+          >
             <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
             </svg>
             <span>Dashboard</span>
           </button>
 
-          <button onClick={handleLogout} className="w-full px-6 py-3.5 text-left text-sm text-red-600 hover:bg-red-50 transition font-medium flex items-center space-x-3">
+          <button
+            onClick={handleLogout}
+            className="w-full px-6 py-3.5 text-left text-sm text-red-600 hover:bg-red-50 transition font-medium flex items-center space-x-3"
+          >
             <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>

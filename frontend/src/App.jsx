@@ -8,20 +8,20 @@ import TrainerLoginPage from './pages/login/TrainerLoginPage'
 import AdminLoginPage from './pages/login/AdminLoginPage'
 import TrainerRegistration from './pages/trainer/TrainerRegistration'
 import StudentDashboard from './pages/dashboard/StudentDashboard'
-import TrainerDashboard from './pages/dashboard/TrainerDashboard'
 import AdminDashboard from './pages/dashboard/AdminDashboard'
 import ProtectedRoute from './components/ProtectedRoute'
 
-// ====== Assessment Pages ======
 import AssessmentPage from './pages/AssessmentPage'
 import TestResultsPage from './pages/TestResultsPage'
 
-// ====== Admin Pages ======
 import AdminSkills from './pages/AdminSkills'
 import AdminStudents from './pages/AdminStudents'
 import AdminTrainers from './pages/AdminTrainers'
 
-// ====== STORAGE KEYS ======
+import MemberDashboard from './pages/dashboard/MemberDashboard'
+import RegularTrainerDashboard from './pages/dashboard/RegularTrainerDashboard'
+import PersonalizedTrainerDashboard from './pages/dashboard/PersonalizedTrainerDashboard'
+
 const USER_STORAGE_KEY = 'careerUser'
 const LOGIN_TIME_KEY = 'careerLoginTime'
 
@@ -35,17 +35,12 @@ function AppContent() {
   }, [])
 
   const checkSession = () => {
-    // Use sessionStorage - each tab has its own session
     const storedUser = sessionStorage.getItem(USER_STORAGE_KEY)
     const loginTime = sessionStorage.getItem(LOGIN_TIME_KEY)
-    
-    console.log('AppContent - storedUser:', storedUser)
-    console.log('AppContent - loginTime:', loginTime)
     
     if (storedUser && loginTime) {
       const elapsed = Date.now() - parseInt(loginTime)
       
-      // Session timeout (3 hours)
       if (elapsed > 3 * 60 * 60 * 1000) {
         sessionStorage.removeItem(USER_STORAGE_KEY)
         sessionStorage.removeItem(LOGIN_TIME_KEY)
@@ -56,7 +51,6 @@ function AppContent() {
       
       try {
         const userData = JSON.parse(storedUser)
-        console.log('AppContent - userData from sessionStorage:', userData)
         setUser(userData)
       } catch (e) {
         sessionStorage.removeItem(USER_STORAGE_KEY)
@@ -67,19 +61,22 @@ function AppContent() {
   }
 
   const handleLogin = (userData) => {
-    console.log('AppContent - handleLogin:', userData)
     setUser(userData)
-    
-    // Store in sessionStorage - only for this tab
     sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData))
     sessionStorage.setItem(LOGIN_TIME_KEY, Date.now().toString())
     
     if (userData.role === 'student') {
       navigate('/student-dashboard')
-    } else if (userData.role === 'trainer') {
-      navigate('/trainer-dashboard')
     } else if (userData.role === 'admin') {
       navigate('/admin-dashboard')
+    } else if (userData.role === 'member') {
+      navigate('/member-dashboard')
+    } else if (userData.role === 'trainer') {
+      if (userData.category === 'personalized') {
+        navigate('/personalized-dashboard')
+      } else {
+        navigate('/trainer-dashboard')
+      }
     } else {
       navigate('/student-dashboard')
     }
@@ -151,22 +148,36 @@ function AppContent() {
         </ProtectedRoute>
       } />
       
+      <Route path="/member-dashboard" element={
+        <ProtectedRoute user={user} allowedRoles={['member']}>
+          <MemberDashboard user={user} onLogout={handleLogout} />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/trainer-dashboard" element={
+        <ProtectedRoute user={user} allowedRoles={['trainer']}>
+          <RegularTrainerDashboard user={user} onLogout={handleLogout} />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/personalized-dashboard" element={
+        <ProtectedRoute user={user} allowedRoles={['trainer']}>
+          <PersonalizedTrainerDashboard user={user} onLogout={handleLogout} />
+        </ProtectedRoute>
+      } />
+      
       <Route path="/student-dashboard" element={
         <ProtectedRoute user={user} allowedRoles={['student']}>
           <StudentDashboard user={user} onLogout={handleLogout} />
         </ProtectedRoute>
       } />
       
-      <Route path="/trainer-dashboard" element={
-        <ProtectedRoute user={user} allowedRoles={['trainer', 'admin']}>
-          <TrainerDashboard user={user} onLogout={handleLogout} />
-        </ProtectedRoute>
-      } />
-      
       <Route path="/dashboard" element={
-        <ProtectedRoute user={user} allowedRoles={['student', 'trainer', 'admin']}>
+        <ProtectedRoute user={user} allowedRoles={['student', 'trainer', 'admin', 'member']}>
           {user?.role === 'student' && <StudentDashboard user={user} onLogout={handleLogout} />}
-          {user?.role === 'trainer' && <TrainerDashboard user={user} onLogout={handleLogout} />}
+          {user?.role === 'trainer' && user?.category === 'personalized' && <PersonalizedTrainerDashboard user={user} onLogout={handleLogout} />}
+          {user?.role === 'trainer' && <RegularTrainerDashboard user={user} onLogout={handleLogout} />}
+          {user?.role === 'member' && <MemberDashboard user={user} onLogout={handleLogout} />}
           {user?.role === 'admin' && <AdminDashboard user={user} onLogout={handleLogout} />}
         </ProtectedRoute>
       } />
