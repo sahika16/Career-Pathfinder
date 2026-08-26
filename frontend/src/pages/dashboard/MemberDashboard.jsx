@@ -11,10 +11,10 @@ function MemberDashboard({ user, onLogout }) {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    content_type: 'video',
+    content_type: '',
     content_url: '',
     skill_name: '',
-    difficulty: 'Medium'
+    difficulty: ''
   })
   const [selectedFile, setSelectedFile] = useState(null)
   const [uploading, setUploading] = useState(false)
@@ -97,7 +97,7 @@ function MemberDashboard({ user, onLogout }) {
 
       setSuccess('Content added successfully!')
       setShowAddContent(false)
-      setFormData({ title: '', description: '', content_type: 'video', content_url: '', skill_name: '', difficulty: 'Medium' })
+      setFormData({ title: '', description: '', content_type: '', content_url: '', skill_name: '', difficulty: '' })
       setSelectedFile(null)
       fetchContents()
       setTimeout(() => setSuccess(null), 3000)
@@ -246,62 +246,65 @@ function MemberDashboard({ user, onLogout }) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+    <div className="min-h-screen bg-gray-100">
       <Navbar user={user} onLogout={onLogout} />
       
-      <div className="max-w-7xl mx-auto pt-28 pb-12 px-6">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Member Dashboard</h1>
-            <p className="text-gray-600">Manage your content and materials</p>
-          </div>
-          {/* REMOVED: User name display from right side */}
+      <div className="max-w-7xl mx-auto pt-24 px-6 pb-12">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Member Dashboard</h1>
+          <p className="text-gray-500">Manage your content and materials</p>
         </div>
 
         {success && (
-          <div className="bg-green-50 border border-green-200 text-green-700 px-6 py-4 rounded-xl mb-4 text-lg">
-            ✅ {success}
+          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4">
+            {success}
           </div>
         )}
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 px-6 py-4 rounded-xl mb-4 text-lg">
-            ❌ {error}
+          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-4">
+            {error}
           </div>
         )}
 
         <button
           onClick={() => setShowAddContent(!showAddContent)}
-          className="bg-blue-600 text-white px-8 py-4 rounded-xl hover:bg-blue-700 transition font-semibold text-lg mb-6 shadow-lg hover:shadow-xl"
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition mb-4 ${
+            showAddContent 
+              ? 'bg-red-600 hover:bg-red-700 text-white' 
+              : 'bg-blue-600 hover:bg-blue-700 text-white'
+          }`}
         >
-          {showAddContent ? '✕ Close' : '+ Add Content'}
+          {showAddContent ? 'Cancel' : '+ Add Content'}
         </button>
 
         {showAddContent && (
-          <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 mb-8">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Add New Content</h2>
-            <form onSubmit={handleAddContent} className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mb-6">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">Add New Content</h2>
+            <form onSubmit={handleAddContent} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Title <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     name="title"
                     value={formData.title}
                     onChange={handleInputChange}
-                    className="w-full px-5 py-3.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
-                    placeholder="Enter content title..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    placeholder="Enter title"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Content Type</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Content Type <span className="text-red-500">*</span></label>
                   <select
                     name="content_type"
                     value={formData.content_type}
                     onChange={handleInputChange}
-                    className="w-full px-5 py-3.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    required
                   >
+                    <option value="">Select Type</option>
                     <option value="video">Video</option>
                     <option value="document">Document</option>
                     <option value="image">Image</option>
@@ -317,17 +320,19 @@ function MemberDashboard({ user, onLogout }) {
                     value={formData.skill_name}
                     onChange={handleInputChange}
                     placeholder="e.g., Python"
-                    className="w-full px-5 py-3.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Difficulty</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Difficulty <span className="text-red-500">*</span></label>
                   <select
                     name="difficulty"
                     value={formData.difficulty}
                     onChange={handleInputChange}
-                    className="w-full px-5 py-3.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    required
                   >
+                    <option value="">Select Difficulty</option>
                     <option value="Easy">Easy</option>
                     <option value="Medium">Medium</option>
                     <option value="Hard">Hard</option>
@@ -339,39 +344,46 @@ function MemberDashboard({ user, onLogout }) {
                     name="description"
                     value={formData.description}
                     onChange={handleInputChange}
-                    rows="4"
-                    className="w-full px-5 py-3.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
-                    placeholder="Enter content description..."
+                    rows="2"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    placeholder="Enter description"
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Upload File (Video, PDF, Image)</label>
-                  <input
-                    type="file"
-                    onChange={handleFileChange}
-                    accept="video/*,application/pdf,image/*"
-                    className="w-full px-5 py-3.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg cursor-pointer"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Upload File or Paste Link</label>
+                  <div className="flex gap-3">
+                    <input
+                      type="url"
+                      name="content_url"
+                      value={formData.content_url}
+                      onChange={handleInputChange}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      placeholder="Paste URL here"
+                    />
+                    <div className="relative">
+                      <input
+                        type="file"
+                        onChange={handleFileChange}
+                        accept="video/*,application/pdf,image/*"
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full"
+                      />
+                      <button
+                        type="button"
+                        className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition text-sm font-medium whitespace-nowrap"
+                      >
+                        Browse
+                      </button>
+                    </div>
+                  </div>
                   {selectedFile && (
-                    <p className="text-sm text-green-600 mt-2">✅ Selected: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)</p>
+                    <p className="text-xs text-green-600 mt-1">Selected: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)</p>
                   )}
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">OR Enter URL</label>
-                  <input
-                    type="url"
-                    name="content_url"
-                    value={formData.content_url}
-                    onChange={handleInputChange}
-                    placeholder="https://example.com/video.mp4"
-                    className="w-full px-5 py-3.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
-                  />
                 </div>
               </div>
               <button
                 type="submit"
                 disabled={uploading}
-                className="bg-blue-600 text-white px-8 py-3.5 rounded-xl hover:bg-blue-700 transition font-semibold text-lg disabled:opacity-50"
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50"
               >
                 {uploading ? 'Uploading...' : 'Add Content'}
               </button>
@@ -379,66 +391,61 @@ function MemberDashboard({ user, onLogout }) {
           </div>
         )}
 
-        {/* YouTube Style Content Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        {/* Content Cards - Title & Date on Same Line, Skill, then Description */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {contents.length === 0 ? (
-            <div className="col-span-full text-center py-16">
-              <p className="text-gray-500 text-xl">No content added yet.</p>
-              <p className="text-gray-400 mt-2">Click "Add Content" to create your first material.</p>
+            <div className="col-span-full bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+              <p className="text-gray-500 text-sm">No content added yet.</p>
             </div>
           ) : (
             contents.map((content) => (
               <div 
                 key={content.id} 
-                className="group bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden cursor-pointer hover:-translate-y-1"
+                className="group bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition cursor-pointer"
                 onClick={() => handleCardClick(content)}
               >
-                {/* Thumbnail / Card Image */}
                 <div className="relative aspect-video bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                  <span className="text-5xl opacity-50">{getContentIcon(content.content_type)}</span>
+                  <span className="text-4xl opacity-50">{getContentIcon(content.content_type)}</span>
                   
-                  {/* Difficulty Badge on LEFT side */}
-                  <div className={`absolute top-2 left-2 px-3 py-1 rounded-full text-xs font-bold text-white shadow-lg ${getDifficultyColor(content.difficulty)}`}>
+                  <div className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-xs font-medium text-white shadow-lg ${getDifficultyColor(content.difficulty)}`}>
                     {getDifficultyBadge(content.difficulty)}
                   </div>
 
-                  {/* Content Type Badge */}
-                  <div className="absolute bottom-2 left-2 px-3 py-1 rounded-full text-xs font-medium text-white bg-black/50 backdrop-blur-sm">
+                  <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-full text-xs font-medium text-white bg-black/50 backdrop-blur-sm">
                     {content.content_type}
                   </div>
 
-                  {/* Delete Button on RIGHT side */}
                   <button
                     onClick={(e) => handleDeleteContent(content.id, e)}
-                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-red-500 hover:bg-red-600 text-white rounded-full p-2 shadow-lg"
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 shadow-lg"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
                 </div>
 
-                {/* Content Details */}
-                <div className="p-4">
-                  <h3 className="font-semibold text-gray-800 text-sm line-clamp-2 hover:text-blue-600 transition">
-                    {content.title}
-                  </h3>
-                  
-                  <div className="flex items-center justify-between mt-2">
-                    <div className="flex items-center gap-2">
-                      {content.skill_name && (
-                        <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-medium">
-                          {content.skill_name}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-xs text-gray-400">
+                <div className="p-3">
+                  {/* Title & Date on Same Line */}
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-semibold text-gray-800 text-sm line-clamp-1 flex-1">
+                      {content.title}
+                    </h3>
+                    <span className="text-xs text-gray-400 whitespace-nowrap">
                       {content.created_at ? new Date(content.created_at).toLocaleDateString() : ''}
                     </span>
                   </div>
 
+                  {/* Skill - Below Title */}
+                  {content.skill_name && (
+                    <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-medium inline-block mt-1">
+                      {content.skill_name}
+                    </span>
+                  )}
+                  
+                  {/* Description - Below Skill */}
                   {content.description && (
-                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                    <p className="text-xs text-gray-500 mt-1.5 line-clamp-2">
                       {content.description}
                     </p>
                   )}
@@ -452,12 +459,12 @@ function MemberDashboard({ user, onLogout }) {
       {/* Content Preview Modal */}
       {showPreview && selectedContent && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[95vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">{selectedContent.title}</h2>
                 <p className="text-sm text-gray-500">
-                  {selectedContent.content_type} • {selectedContent.difficulty} • {selectedContent.skill_name || 'No skill'}
+                  {selectedContent.content_type} • {selectedContent.difficulty} {selectedContent.skill_name && `• ${selectedContent.skill_name}`}
                 </p>
               </div>
               <button
@@ -470,24 +477,24 @@ function MemberDashboard({ user, onLogout }) {
 
             <div className="p-6">
               {selectedContent.description && (
-                <div className="mb-6 p-4 bg-gray-50 rounded-xl">
-                  <p className="text-gray-700">{selectedContent.description}</p>
+                <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                  <p className="text-gray-700 text-sm">{selectedContent.description}</p>
                 </div>
               )}
 
-              <div className="bg-gray-50 rounded-xl p-4 min-h-[300px] flex items-center justify-center">
+              <div className="bg-gray-50 rounded-lg p-4 min-h-[300px] flex items-center justify-center">
                 {renderContentPreview()}
               </div>
 
               {selectedContent.content_url && (
-                <div className="mt-6 text-center">
+                <div className="mt-4 text-center">
                   <a
                     href={selectedContent.content_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition font-medium inline-flex items-center gap-2"
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium inline-flex items-center gap-2"
                   >
-                    📥 Download / Open Full Content
+                    Open Full Content
                   </a>
                 </div>
               )}
