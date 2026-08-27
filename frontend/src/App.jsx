@@ -22,6 +22,8 @@ import MemberDashboard from './pages/dashboard/MemberDashboard'
 import RegularTrainerDashboard from './pages/dashboard/RegularTrainerDashboard'
 import PersonalizedTrainerDashboard from './pages/dashboard/PersonalizedTrainerDashboard'
 
+import LearningResourcesPage from './pages/LearningResourcesPage'
+
 const USER_STORAGE_KEY = 'careerUser'
 const LOGIN_TIME_KEY = 'careerLoginTime'
 
@@ -163,6 +165,12 @@ function AppContent() {
       <Route path="/personalized-dashboard" element={
         <ProtectedRoute user={user} allowedRoles={['trainer']}>
           <PersonalizedTrainerDashboard user={user} onLogout={handleLogout} />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/learning-resources" element={
+        <ProtectedRoute user={user} allowedRoles={['student']}>
+          <LearningResourcesPage user={user} onLogout={handleLogout} />
         </ProtectedRoute>
       } />
       

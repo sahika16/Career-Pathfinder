@@ -92,12 +92,6 @@ function AssessmentPage({ user, onLogout }) {
     }
   }
 
-  const handleSubmitTest = async () => {
-    if (window.confirm('Are you sure you want to submit this test?')) {
-      await submitTestHandler()
-    }
-  }
-
   const handleAutoSubmit = async () => {
     alert('Time is up! Your test will be submitted automatically.')
     await submitTestHandler()
@@ -113,7 +107,7 @@ function AssessmentPage({ user, onLogout }) {
       }
       const results = await submitTest(submissionData)
       
-      console.log('📊 Full results from API:', results)
+      //console.log('📊 Full results from API:', results)
       
       if (results.already_taken) {
         alert('You have already completed this test!')
@@ -121,16 +115,14 @@ function AssessmentPage({ user, onLogout }) {
         return
       }
       
-      // Make sure we have the results data
       if (!results || !results.details) {
         alert('No results data received. Please try again.')
         setSubmitting(false)
         return
       }
       
-      alert(`Test completed! Score: ${results.score_percentage.toFixed(1)}% - ${results.result_status}`)
+      //alert(`Test completed! Score: ${results.score_percentage.toFixed(1)}% - ${results.result_status}`)
       
-      // Navigate to results page with full data
       navigate(`/results/${resumeId}/${skillName}`, { 
         state: { 
           results: {

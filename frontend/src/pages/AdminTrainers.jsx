@@ -11,6 +11,10 @@ function AdminTrainers({ user, onLogout }) {
   const [filteredTrainers, setFilteredTrainers] = useState([])
   const [selectedTrainer, setSelectedTrainer] = useState(null)
   const [showDetails, setShowDetails] = useState(false)
+  const [trainerContent, setTrainerContent] = useState([])
+  const [trainerSessions, setTrainerSessions] = useState([])
+  const [loadingContent, setLoadingContent] = useState(false)
+  const [activeTab, setActiveTab] = useState('details')
   const [stats, setStats] = useState({
     total: 0,
     approved: 0,
@@ -83,6 +87,40 @@ function AdminTrainers({ user, onLogout }) {
     }
   }
 
+  const fetchTrainerContent = async (trainerId) => {
+    try {
+      setLoadingContent(true)
+      const response = await fetch(`http://localhost:8000/api/member/contents/${trainerId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setTrainerContent(data)
+      } else {
+        setTrainerContent([])
+      }
+    } catch (err) {
+      setTrainerContent([])
+    } finally {
+      setLoadingContent(false)
+    }
+  }
+
+  const fetchTrainerSessions = async (trainerId) => {
+    try {
+      setLoadingContent(true)
+      const response = await fetch(`http://localhost:8000/api/trainer/sessions/${trainerId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setTrainerSessions(data)
+      } else {
+        setTrainerSessions([])
+      }
+    } catch (err) {
+      setTrainerSessions([])
+    } finally {
+      setLoadingContent(false)
+    }
+  }
+
   const handleApprove = async (trainerId) => {
     if (!window.confirm('Approve this trainer?')) return
     
@@ -130,11 +168,16 @@ function AdminTrainers({ user, onLogout }) {
   const handleNameClick = (trainer) => {
     setSelectedTrainer(trainer)
     setShowDetails(true)
+    setActiveTab('details')
+    fetchTrainerContent(trainer.id)
+    fetchTrainerSessions(trainer.id)
   }
 
   const closeDetails = () => {
     setShowDetails(false)
     setSelectedTrainer(null)
+    setTrainerContent([])
+    setTrainerSessions([])
   }
 
   const handleBack = () => {
@@ -343,10 +386,10 @@ function AdminTrainers({ user, onLogout }) {
       {/* Trainer Details Modal */}
       {showDetails && selectedTrainer && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
               <h2 className="text-xl font-bold text-gray-900">
-                Trainer Details
+                Trainer Details - {selectedTrainer.name}
               </h2>
               <button
                 onClick={closeDetails}
@@ -357,71 +400,230 @@ function AdminTrainers({ user, onLogout }) {
             </div>
 
             <div className="p-6">
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Name</label>
-                    <p className="text-lg font-semibold text-gray-900">{selectedTrainer.name}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">ID</label>
-                    <p className="text-lg font-semibold text-gray-900">#{selectedTrainer.id}</p>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Email</label>
-                  <p className="text-lg text-gray-900">{selectedTrainer.email}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Phone</label>
-                  <p className="text-lg text-gray-900">{selectedTrainer.phone || 'N/A'}</p>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Role</label>
-                    <div className="mt-1">{getRoleBadge(selectedTrainer.role)}</div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Category</label>
-                    <div className="mt-1">{getCategoryBadge(selectedTrainer.category)}</div>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Specialty</label>
-                  <p className="text-lg text-gray-900">
-                    <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-lg">
-                      {selectedTrainer.specialty || 'N/A'}
-                    </span>
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Education</label>
-                  <p className="text-lg text-gray-900">{selectedTrainer.education || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Experience</label>
-                  <p className="text-lg text-gray-900">{selectedTrainer.experience || 'N/A'} years</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Status</label>
-                  <div className="mt-1">
-                    {selectedTrainer.is_approved ? (
-                      <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700 font-medium">Approved</span>
-                    ) : selectedTrainer.status === 'rejected' ? (
-                      <span className="px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700 font-medium">Rejected</span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-700 font-medium">Pending</span>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Registered On</label>
-                  <p className="text-lg text-gray-900">
-                    {selectedTrainer.created_at ? new Date(selectedTrainer.created_at).toLocaleDateString() : 'N/A'}
-                  </p>
-                </div>
+              {/* Tabs */}
+              <div className="flex flex-wrap gap-2 mb-6">
+                <button
+                  onClick={() => setActiveTab('details')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                    activeTab === 'details' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Profile
+                </button>
+                <button
+                  onClick={() => setActiveTab('content')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                    activeTab === 'content' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Content ({trainerContent.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('sessions')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                    activeTab === 'sessions' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Sessions ({trainerSessions.length})
+                </button>
               </div>
 
+              {/* Profile Tab */}
+              {activeTab === 'details' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Name</label>
+                      <p className="text-lg font-semibold text-gray-900">{selectedTrainer.name}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">ID</label>
+                      <p className="text-lg font-semibold text-gray-900">#{selectedTrainer.id}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Email</label>
+                    <p className="text-lg text-gray-900">{selectedTrainer.email}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Phone</label>
+                    <p className="text-lg text-gray-900">{selectedTrainer.phone || 'N/A'}</p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Role</label>
+                      <div className="mt-1">{getRoleBadge(selectedTrainer.role)}</div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Category</label>
+                      <div className="mt-1">{getCategoryBadge(selectedTrainer.category)}</div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Specialty</label>
+                    <p className="text-lg text-gray-900">
+                      <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-lg">
+                        {selectedTrainer.specialty || 'N/A'}
+                      </span>
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Education</label>
+                    <p className="text-lg text-gray-900">{selectedTrainer.education || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Experience</label>
+                    <p className="text-lg text-gray-900">{selectedTrainer.experience || 'N/A'} years</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Status</label>
+                    <div className="mt-1">
+                      {selectedTrainer.is_approved ? (
+                        <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700 font-medium">Approved</span>
+                      ) : selectedTrainer.status === 'rejected' ? (
+                        <span className="px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700 font-medium">Rejected</span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-700 font-medium">Pending</span>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Registered On</label>
+                    <p className="text-lg text-gray-900">
+                      {selectedTrainer.created_at ? new Date(selectedTrainer.created_at).toLocaleDateString() : 'N/A'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Content Tab */}
+              {activeTab === 'content' && (
+                <div>
+                  {loadingContent ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                      <p className="mt-2 text-gray-500">Loading content...</p>
+                    </div>
+                  ) : trainerContent.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>No content uploaded by this trainer.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {trainerContent.map((content) => (
+                        <div key={content.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                          <div className="flex items-start justify-between">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                                {content.content_type}
+                              </span>
+                              {content.difficulty && (
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                  content.difficulty === 'Beginner' ? 'bg-green-100 text-green-700' :
+                                  content.difficulty === 'Intermediate' ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-red-100 text-red-700'
+                                }`}>
+                                  {content.difficulty}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs text-gray-400">
+                              {content.created_at ? new Date(content.created_at).toLocaleDateString() : ''}
+                            </span>
+                          </div>
+                          <h4 className="font-semibold text-gray-800 text-sm mt-2">{content.title}</h4>
+                          <p className="text-xs text-gray-500 mt-1 line-clamp-2">{content.description}</p>
+                          {content.skill_name && (
+                            <p className="text-xs text-purple-600 mt-1">Skill: {content.skill_name}</p>
+                          )}
+                          {content.content_url && (
+                            <a 
+                              href={content.content_url} 
+                              target="_blank" 
+                              rel="noopener" 
+                              className="text-blue-600 hover:underline text-xs mt-2 inline-block"
+                            >
+                              View Content →
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Sessions Tab */}
+              {activeTab === 'sessions' && (
+                <div>
+                  {loadingContent ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                      <p className="mt-2 text-gray-500">Loading sessions...</p>
+                    </div>
+                  ) : trainerSessions.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>No sessions scheduled by this trainer.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {trainerSessions.map((session) => (
+                        <div key={session.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                          <div className="flex flex-wrap justify-between items-start gap-2">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h4 className="font-semibold text-gray-800 text-sm">{session.title}</h4>
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                  session.status === 'scheduled' ? 'bg-blue-100 text-blue-700' :
+                                  session.status === 'ongoing' ? 'bg-green-100 text-green-700' :
+                                  session.status === 'completed' ? 'bg-gray-100 text-gray-700' :
+                                  'bg-red-100 text-red-700'
+                                }`}>
+                                  {session.status}
+                                </span>
+                                {session.level && (
+                                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                                    {session.level}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1">{session.description}</p>
+                              <div className="flex flex-wrap gap-4 mt-2 text-xs text-gray-600">
+                                <span>📅 {session.session_date ? new Date(session.session_date).toLocaleDateString() : 'N/A'}</span>
+                                <span>⏱️ {session.duration_minutes || 0} min</span>
+                                <span>👥 {session.enrolled_count || 0}/{session.max_students || 0} students</span>
+                                {session.price > 0 && <span>💰 ₹{session.price}</span>}
+                                {session.category && <span>📂 {session.category}</span>}
+                              </div>
+                              {session.meeting_link && (
+                                <a 
+                                  href={session.meeting_link} 
+                                  target="_blank" 
+                                  rel="noopener" 
+                                  className="text-blue-600 hover:underline text-xs mt-1 inline-block"
+                                >
+                                  Join Meeting →
+                                </a>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              Created: {session.created_at ? new Date(session.created_at).toLocaleDateString() : ''}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Action Buttons */}
               <div className="mt-6 pt-6 border-t border-gray-200 flex flex-wrap gap-3">
                 {!selectedTrainer.is_approved && selectedTrainer.status !== 'rejected' && (
                   <>

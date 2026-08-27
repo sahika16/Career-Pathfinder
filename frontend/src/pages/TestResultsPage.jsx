@@ -14,7 +14,6 @@ function TestResultsPage({ user, onLogout }) {
 
   useEffect(() => {
     if (location.state?.results) {
-      console.log('Results from state:', location.state.results)
       setResults(location.state.results)
       setLoading(false)
     } else {
@@ -25,7 +24,6 @@ function TestResultsPage({ user, onLogout }) {
   const fetchResults = async () => {
     try {
       const data = await getTestResults(resumeId, skillName)
-      console.log('Results from API:', data)
       setResults(data)
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load results.')
@@ -54,6 +52,10 @@ function TestResultsPage({ user, onLogout }) {
 
   const handleBackToDashboard = () => {
     navigate('/student-dashboard')
+  }
+
+  const handleLearningResources = () => {
+    navigate('/learning-resources')
   }
 
   if (loading) {
@@ -281,12 +283,18 @@ function TestResultsPage({ user, onLogout }) {
         </div>
 
         {/* Buttons */}
-        <div className="mt-8 flex justify-center">
+        <div className="mt-8 flex flex-wrap gap-4 justify-center">
           <button
             onClick={handleBackToDashboard}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-10 py-3 rounded-xl hover:shadow-lg transition font-semibold"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl shadow-md hover:shadow-lg transition font-semibold"
           >
             Back to Dashboard
+          </button>
+          <button
+            onClick={handleLearningResources}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl shadow-md hover:shadow-lg transition font-semibold"
+          >
+            Learning Resources
           </button>
         </div>
       </div>

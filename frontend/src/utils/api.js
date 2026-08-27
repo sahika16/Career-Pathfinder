@@ -1,6 +1,7 @@
 import axios from 'axios'
 
 const API_BASE_URL = 'http://localhost:8000/api'
+
 export const uploadResume = async (file) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -14,7 +15,6 @@ export const uploadResume = async (file) => {
     }
 }
 
-// ====== SKILL MANAGEMENT ======
 export const getSkills = async (resumeId) => {
     try {
         const response = await axios.get(`${API_BASE_URL}/skills/${resumeId}`)
@@ -69,7 +69,6 @@ export const updateResumeStatus = async (resumeId, data) => {
     }
 }
 
-// ====== OTP LOGIN ======
 export const sendLoginOTP = async (emailOrPhone) => {
     try {
         const response = await axios.post(`${API_BASE_URL}/login/send-otp`, { 
@@ -112,7 +111,6 @@ export const getUserProgress = async (resumeId) => {
     }
 }
 
-// ====== ASSESSMENT FUNCTIONS ======
 export const generateTest = async (resumeId, skillName) => {
     try {
         const response = await axios.get(`${API_BASE_URL}/test/generate/${resumeId}/${skillName}`)
@@ -167,13 +165,11 @@ export const getCompletedSkills = async (resumeId) => {
     }
 }
 
-// ====== TRAINER MANAGEMENT ======
 export const getAllTrainers = async () => {
     try {
         const response = await axios.get(`${API_BASE_URL}/admin/trainers`)
         return response.data
     } catch (error) {
-        console.error('Error fetching trainers:', error)
         throw error
     }
 }
@@ -183,7 +179,6 @@ export const getPendingTrainers = async () => {
         const response = await axios.get(`${API_BASE_URL}/admin/pending-trainers`)
         return response.data
     } catch (error) {
-        console.error('Error fetching pending trainers:', error)
         throw error
     }
 }
@@ -193,7 +188,6 @@ export const approveTrainer = async (trainerId) => {
         const response = await axios.put(`${API_BASE_URL}/admin/approve-trainer/${trainerId}`)
         return response.data
     } catch (error) {
-        console.error('Error approving trainer:', error)
         throw error
     }
 }
@@ -203,7 +197,6 @@ export const rejectTrainer = async (trainerId) => {
         const response = await axios.put(`${API_BASE_URL}/admin/reject-trainer/${trainerId}`)
         return response.data
     } catch (error) {
-        console.error('Error rejecting trainer:', error)
         throw error
     }
 }
@@ -213,7 +206,6 @@ export const loginTrainer = async (email, password) => {
         const response = await axios.post(`${API_BASE_URL}/login/trainer`, { email, password })
         return response.data
     } catch (error) {
-        console.error('Error logging in trainer:', error)
         throw error
     }
 }
@@ -223,12 +215,10 @@ export const registerTrainer = async (trainerData) => {
         const response = await axios.post(`${API_BASE_URL}/trainer/register`, trainerData)
         return response.data
     } catch (error) {
-        console.error('Error registering trainer:', error)
         throw error
     }
 }
 
-// ====== ADMIN: Question Management ======
 export const addQuestion = async (questionData) => {
     try {
         const response = await axios.post(`${API_BASE_URL}/admin/question`, questionData)
@@ -241,7 +231,6 @@ export const addQuestion = async (questionData) => {
 export const getAllQuestions = async () => {
     try {
         const response = await axios.get(`${API_BASE_URL}/admin/questions`)
-        
         if (response.data && response.data.questions) {
             return response.data.questions
         }
@@ -266,7 +255,6 @@ export const getAllQuestions = async () => {
 export const getQuestionsBySkill = async (skillName) => {
     try {
         const response = await axios.get(`${API_BASE_URL}/admin/questions/${skillName}`)
-        
         if (response.data && response.data.questions) {
             return response.data.questions
         }
@@ -309,7 +297,6 @@ export const deleteQuestion = async (questionId) => {
 export const getAllSkillNames = async () => {
     try {
         const response = await axios.get(`${API_BASE_URL}/admin/skills-list`)
-        
         if (response.data && response.data.skills) {
             return { skills: response.data.skills }
         }
@@ -340,11 +327,9 @@ export const addAdminSkill = async (skillName) => {
     }
 }
 
-// ====== ADMIN: Student Management ======
 export const getAllResumes = async () => {
     try {
         const response = await axios.get(`${API_BASE_URL}/resumes`)
-        
         if (response.data && response.data.resumes) {
             return response.data.resumes
         }
@@ -369,6 +354,33 @@ export const getAllResumes = async () => {
 export const getAllTestResultsForAdmin = async () => {
     try {
         const response = await axios.get(`${API_BASE_URL}/test/all-results`)
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+export const getStudentContent = async (studentId) => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/student/content/${studentId}`)
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+export const getRecommendedContent = async (studentId) => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/student/recommended-content/${studentId}`)
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+export const getPersonalizedTrainers = async (studentId) => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/student/personalized-trainers/${studentId}`)
         return response.data
     } catch (error) {
         throw error

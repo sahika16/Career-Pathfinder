@@ -48,7 +48,7 @@ function Hero({ onUploadClick }) {
           >
             <span className="absolute inset-0 bg-gradient-to-r from-[#fddb92] to-[#f093fb] opacity-0 group-hover:opacity-100 transition duration-300"></span>
             <span className="relative z-10 flex items-center space-x-3">
-              <span>📤</span>
+
               <span>Upload Resume</span>
             </span>
           </button>

@@ -1588,6 +1588,202 @@ def get_completed_skills(resume_id: int, db: Session = Depends(get_db)):
     completed = get_completed_skills(resume_id, db)
     return {"completed": completed}
 
+
+# ====== STUDENT LEARNING RESOURCES ENDPOINTS ======
+
+@app.get("/api/student/content/{student_id}")
+def get_student_content(student_id: int, db: Session = Depends(get_db)):
+    """Get all learning content categorized by role"""
+    
+    student = db.query(models.Resume).filter(models.Resume.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    trainers = db.query(models.Trainer).filter(
+        models.Trainer.is_approved == True
+    ).all()
+    
+    result = {
+        "regular_content": [],
+        "member_content": [],
+        "personalized_coaches": []
+    }
+    
+    for trainer in trainers:
+        contents = db.query(models.TrainerContent).filter(
+            models.TrainerContent.trainer_id == trainer.id
+        ).all()
+        
+        if not contents:
+            continue
+        
+        trainer_data = {
+            "trainer_id": trainer.id,
+            "trainer_name": trainer.name,
+            "role": trainer.role,  # member or trainer
+            "category": trainer.category,  # regular or personalized
+            "specialty": trainer.specialty,
+            "hourly_rate": trainer.hourly_rate,
+            "contents": [
+                {
+                    "id": c.id,
+                    "title": c.title,
+                    "description": c.description,
+                    "content_type": c.content_type,
+                    "content_url": c.content_url,
+                    "skill_name": c.skill_name,
+                    "difficulty": c.difficulty,
+                    "created_at": c.created_at
+                }
+                for c in contents
+            ]
+        }
+        
+        # Categorize based on ROLE first
+        if trainer.role == "member":
+            result["member_content"].append(trainer_data)
+        elif trainer.role == "trainer":
+            if trainer.category == "regular":
+                result["regular_content"].append(trainer_data)
+            elif trainer.category == "personalized":
+                # Also add to personalized coaches
+                result["personalized_coaches"].append({
+                    "trainer_id": trainer.id,
+                    "trainer_name": trainer.name,
+                    "role": trainer.role,
+                    "category": trainer.category,
+                    "specialty": trainer.specialty,
+                    "skills_taught": trainer.skills_taught,
+                    "about": trainer.about,
+                    "hourly_rate": trainer.hourly_rate,
+                    "available_days": trainer.available_days,
+                    "available_time_start": trainer.available_time_start,
+                    "available_time_end": trainer.available_time_end,
+                    "qualifications": trainer.qualifications,
+                    "experience": trainer.experience,
+                    "education": trainer.education,
+                    "rating": trainer.rating
+                })
+    
+    return result
+
+@app.get("/api/student/trainer-content/{trainer_id}")
+def get_trainer_content(trainer_id: int, db: Session = Depends(get_db)):
+    trainer = db.query(models.Trainer).filter(models.Trainer.id == trainer_id).first()
+    if not trainer:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    
+    contents = db.query(models.TrainerContent).filter(
+        models.TrainerContent.trainer_id == trainer_id
+    ).order_by(models.TrainerContent.created_at.desc()).all()
+    
+    return {
+        "trainer_id": trainer.id,
+        "trainer_name": trainer.name,
+        "role": trainer.role,
+        "category": trainer.category,
+        "specialty": trainer.specialty,
+        "about": trainer.about,
+        "hourly_rate": trainer.hourly_rate,
+        "contents": [
+            {
+                "id": c.id,
+                "title": c.title,
+                "description": c.description,
+                "content_type": c.content_type,
+                "content_url": c.content_url,
+                "skill_name": c.skill_name,
+                "difficulty": c.difficulty,
+                "created_at": c.created_at
+            }
+            for c in contents
+        ]
+    }
+@app.get("/api/student/recommended-content/{student_id}")
+def get_recommended_content(student_id: int, db: Session = Depends(get_db)):
+    """Get content recommended based on student's skills and ratings"""
+    student_skills = db.query(models.Skill).filter(
+        models.Skill.resume_id == student_id,
+        models.Skill.rating.isnot(None)
+    ).all()
+    
+    skill_names = [s.skill_name for s in student_skills]
+    recommended = []
+    
+    # Find trainers who teach these skills
+    for skill in student_skills:
+        trainers = db.query(models.Trainer).filter(
+            models.Trainer.is_approved == True,
+            models.Trainer.skills_taught.ilike(f"%{skill.skill_name}%")
+        ).all()
+        
+        for trainer in trainers:
+            contents = db.query(models.TrainerContent).filter(
+                models.TrainerContent.trainer_id == trainer.id,
+                models.TrainerContent.skill_name == skill.skill_name
+            ).all()
+            
+            for content in contents:
+                recommended.append({
+                    "content_id": content.id,
+                    "title": content.title,
+                    "description": content.description,
+                    "content_type": content.content_type,
+                    "content_url": content.content_url,
+                    "skill_name": content.skill_name,
+                    "trainer_name": trainer.name,
+                    "trainer_id": trainer.id,
+                    "difficulty": content.difficulty,
+                    "created_at": content.created_at
+                })
+    
+    return {"recommended": recommended}
+
+@app.get("/api/student/personalized-trainers/{student_id}")
+def get_personalized_trainers_for_student(student_id: int, db: Session = Depends(get_db)):
+    """Get personalized trainers available for the student"""
+    
+    student = db.query(models.Resume).filter(models.Resume.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    # Get student's skills
+    skills = db.query(models.Skill).filter(models.Skill.resume_id == student_id).all()
+    skill_names = [s.skill_name for s in skills]
+    
+    # Get all personalized trainers
+    trainers = db.query(models.Trainer).filter(
+        models.Trainer.is_approved == True,
+        models.Trainer.category == "personalized"
+    ).all()
+    
+    result = []
+    for trainer in trainers:
+        trainer_skills = trainer.skills_taught.split(',') if trainer.skills_taught else []
+        matching_skills = [s for s in skill_names if any(s.lower() in ts.lower() for ts in trainer_skills)]
+        
+        result.append({
+            "trainer_id": trainer.id,
+            "trainer_name": trainer.name,
+            "specialty": trainer.specialty,
+            "skills_taught": trainer.skills_taught,
+            "matching_skills": matching_skills,
+            "about": trainer.about,
+            "hourly_rate": trainer.hourly_rate,
+            "available_days": trainer.available_days,
+            "available_time_start": trainer.available_time_start,
+            "available_time_end": trainer.available_time_end,
+            "qualifications": trainer.qualifications,
+            "experience": trainer.experience,
+            "education": trainer.education,
+            "rating": trainer.rating,
+            "match_score": len(matching_skills) / max(len(skill_names), 1) * 100 if skill_names else 0
+        })
+    
+    result.sort(key=lambda x: x['match_score'], reverse=True)
+    
+    return result
+
 @app.get("/api/health")
 def health_check():
     return {"status": "healthy"}

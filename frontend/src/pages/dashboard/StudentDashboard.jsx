@@ -35,19 +35,15 @@ function StudentDashboard({ user, onLogout }) {
   const handleContinue = () => {
     if (!progress || !user) return
     
-    // If skills rated, they are in assessment phase - stay on dashboard
     if (progress.skills_rated && progress.total_skills > 0) {
-      // Just show dashboard - don't navigate anywhere
       return
     }
     
-    // If skills exist but not rated - go to rating
     if (progress.has_skills && progress.total_skills > 0) {
       navigate(`/skill-rating/${user.resumeId}`)
       return
     }
     
-    // Otherwise go to review
     navigate(`/skill-review/${user.resumeId}`)
   }
 
@@ -65,6 +61,10 @@ function StudentDashboard({ user, onLogout }) {
 
   const handleStartNew = () => {
     navigate('/')
+  }
+
+  const handleLearningResources = () => {
+    navigate('/learning-resources')
   }
 
   if (loading) {
@@ -193,21 +193,28 @@ function StudentDashboard({ user, onLogout }) {
         <div className="flex flex-wrap gap-4 justify-center">
           <button
             onClick={handleContinue}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-10 py-4 rounded-xl hover:shadow-lg transition font-bold text-lg"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition shadow-sm hover:shadow-md"
           >
             Continue Where You Left Off
-            <span className="block text-sm font-normal opacity-80">
-              {progress?.skills_rated ? 'Assessment ' : 
-               progress?.has_skills ? 'Go to Skill Rating' : 
-               'Go to Skill Review'}
+            <span className="block text-xs font-normal opacity-80 mt-0.5">
+              {progress?.skills_rated ? 'Assessment' : 
+               progress?.has_skills ? 'Skill Rating' : 
+               'Skill Review'}
             </span>
           </button>
           
           <button
             onClick={handleStartNew}
-            className="bg-gray-200 text-gray-700 px-8 py-4 rounded-xl hover:bg-gray-300 transition font-semibold"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition shadow-sm hover:shadow-md"
           >
             Start New Resume
+          </button>
+          
+          <button
+            onClick={handleLearningResources}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition shadow-sm hover:shadow-md"
+          >
+            Learning Resources
           </button>
         </div>
       </div>

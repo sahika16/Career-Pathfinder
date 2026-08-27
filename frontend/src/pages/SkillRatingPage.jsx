@@ -52,10 +52,17 @@ function SkillRatingPage({ user, onLogout }) {
       
       await updateResumeStatus(resumeId, {
         skills_rated: true,
-        current_step: 'login'
+        current_step: 'dashboard'
       })
       
-      navigate('/login/student')
+      // Check if user is logged in
+      if (user && user.resumeId) {
+        // User is logged in - go to dashboard
+        navigate('/student-dashboard')
+      } else {
+        // User is not logged in - go to login page
+        navigate('/login/student')
+      }
       
     } catch (err) {
       setError('Failed to save ratings. Please try again.')
@@ -174,7 +181,7 @@ function SkillRatingPage({ user, onLogout }) {
             disabled={saving}
             className="flex-1 bg-gradient-to-r from-[#f093fb] to-[#f5576c] text-white py-4 rounded-xl hover:shadow-lg transition font-bold text-lg disabled:opacity-50"
           >
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? 'Saving...' : 'Save & Continue'}
           </button>
         </div>
       </div>
