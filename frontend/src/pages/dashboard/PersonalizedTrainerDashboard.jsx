@@ -3,38 +3,35 @@ import { useNavigate } from 'react-router-dom'
 import Navbar from '../../components/Navbar'
 import axios from 'axios'
 
-function RegularTrainerDashboard({ user, onLogout }) {
+function PersonalizedTrainerDashboard({ user, onLogout }) {
   const navigate = useNavigate()
-  const [sessions, setSessions] = useState([])
+  const [students, setStudents] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showAddSession, setShowAddSession] = useState(false)
-  const [showAddContent, setShowAddContent] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-  const [contents, setContents] = useState([])
+  const [showAddStudent, setShowAddStudent] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
-  const [activeTab, setActiveTab] = useState('sessions')
-  const [uploading, setUploading] = useState(false)
+  const [searchResult, setSearchResult] = useState(null)
+  const [activeTab, setActiveTab] = useState('students')
 
   const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    session_date: '',
-    start_time: '',
-    end_time: '',
-    duration_minutes: '',
-    max_students: '',
-    price: 0,
-    category: '',
-    level: '',
-    meeting_link: '',
-    content_title: '',
-    content_description: '',
-    content_url: '',
-    content_type: '',
-    content_skill: '',
-    content_difficulty: '',
-    content_file: null
+    student_email: '',
+    skill_name: '',
+    current_level: 'Beginner',
+    target_level: 'Intermediate',
+    total_sessions: 5,
+    session_duration: 60,
+    price_per_session: 0,
+    notes: ''
+  })
+
+  const [availability, setAvailability] = useState({
+    available_days: [],
+    available_time_start: '',
+    available_time_end: '',
+    break_start: '',
+    break_end: '',
+    hourly_rate: 0,
+    skills_offered: []
   })
 
   const [trainerSettings, setTrainerSettings] = useState({
@@ -45,37 +42,30 @@ function RegularTrainerDashboard({ user, onLogout }) {
     break_end: '',
     about: '',
     expertise: '',
-    qualifications: ''
+    qualifications: '',
+    hourly_rate: '',
+    skills_taught: ''
   })
 
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-  const contentTypes = ['video', 'pdf', 'document', 'notes', 'quiz', 'assignment', 'presentation', 'other']
+  const levels = ['Beginner', 'Intermediate', 'Advanced', 'Expert']
+  const [skillInput, setSkillInput] = useState('')
 
   useEffect(() => {
     if (user && user.id) {
-      fetchSessions()
-      fetchContents()
+      fetchStudents()
       fetchTrainerSettings()
-    } else {
-      setLoading(false)
     }
   }, [user])
 
-  const fetchSessions = async () => {
+  const fetchStudents = async () => {
     try {
-      const response = await axios.get(`http://localhost:8000/api/trainer/sessions/${user.id}`)
-      setSessions(response.data)
+      const response = await axios.get(`http://localhost:8000/api/trainer/personalized/students/${user.id}`)
+      setStudents(response.data)
     } catch (err) {
-      console.error('Error fetching sessions:', err)
-    }
-  }
-
-  const fetchContents = async () => {
-    try {
-      const response = await axios.get(`http://localhost:8000/api/member/contents/${user.id}`)
-      setContents(response.data)
-    } catch (err) {
-      console.error('Error fetching contents:', err)
+      console.error('Error fetching students:', err)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -91,34 +81,43 @@ function RegularTrainerDashboard({ user, onLogout }) {
           break_end: response.data.break_end || '',
           about: response.data.about || '',
           expertise: response.data.expertise || '',
-          qualifications: response.data.qualifications || ''
+          qualifications: response.data.qualifications || '',
+          hourly_rate: response.data.hourly_rate || '',
+          skills_taught: response.data.skills_taught || ''
+        })
+        setAvailability({
+          available_days: response.data.available_days || [],
+          available_time_start: response.data.available_time_start || '',
+          available_time_end: response.data.available_time_end || '',
+          break_start: response.data.break_start || '',
+          break_end: response.data.break_end || '',
+          hourly_rate: parseFloat(response.data.hourly_rate) || 0,
+          skills_offered: response.data.skills_taught ? response.data.skills_taught.split(',').map(s => s.trim()) : []
         })
       }
     } catch (err) {
       console.error('Error fetching trainer settings:', err)
-    } finally {
-      setLoading(false)
     }
   }
 
   const handleInputChange = (e) => {
-    const { name, value, type, files } = e.target
+    const { name, value } = e.target
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'file' ? files[0] : value
+      [name]: value
     }))
   }
 
-  const handleSettingsChange = (e) => {
+  const handleAvailabilityChange = (e) => {
     const { name, value } = e.target
-    setTrainerSettings(prev => ({
+    setAvailability(prev => ({
       ...prev,
       [name]: value
     }))
   }
 
   const handleDayToggle = (day) => {
-    setTrainerSettings(prev => ({
+    setAvailability(prev => ({
       ...prev,
       available_days: prev.available_days.includes(day)
         ? prev.available_days.filter(d => d !== day)
@@ -126,86 +125,101 @@ function RegularTrainerDashboard({ user, onLogout }) {
     }))
   }
 
-  const handleAddSession = async (e) => {
+  const handleAddSkill = () => {
+    if (skillInput.trim() && !availability.skills_offered.includes(skillInput.trim())) {
+      setAvailability(prev => ({
+        ...prev,
+        skills_offered: [...prev.skills_offered, skillInput.trim()]
+      }))
+      setSkillInput('')
+    }
+  }
+
+  const handleRemoveSkill = (skill) => {
+    setAvailability(prev => ({
+      ...prev,
+      skills_offered: prev.skills_offered.filter(s => s !== skill)
+    }))
+  }
+
+  const handleSearchStudent = async () => {
+    if (!formData.student_email) {
+      setError('Please enter student email')
+      return
+    }
+    try {
+      const response = await axios.get(`http://localhost:8000/api/student/find/${formData.student_email}`)
+      setSearchResult(response.data)
+      setError(null)
+    } catch (err) {
+      setError('Student not found with this email')
+      setSearchResult(null)
+    }
+  }
+
+  const handleAssignStudent = async (e) => {
     e.preventDefault()
-    
-    if (!formData.title || !formData.session_date || !formData.start_time || !formData.end_time || !formData.category || !formData.level) {
+    if (!searchResult) {
+      setError('Please search for a student first')
+      return
+    }
+
+    if (!formData.skill_name || !formData.current_level || !formData.target_level || !formData.total_sessions) {
       setError('Please fill in all required fields')
       setTimeout(() => setError(null), 3000)
       return
     }
 
     try {
-      await axios.post('http://localhost:8000/api/trainer/session', {
+      await axios.post('http://localhost:8000/api/trainer/personalized/assign', {
         ...formData,
         trainer_id: user.id,
-        duration_minutes: parseInt(formData.duration_minutes) || 0,
-        max_students: parseInt(formData.max_students) || 0
+        student_id: searchResult.id,
+        student_name: searchResult.name,
+        student_email: searchResult.email,
+        total_sessions: parseInt(formData.total_sessions),
+        price_per_session: parseFloat(formData.price_per_session) || 0,
+        session_duration: parseInt(formData.session_duration) || 60
       })
-      setSuccess('Session scheduled successfully!')
-      setShowAddSession(false)
-      setFormData({ title: '', description: '', session_date: '', start_time: '', end_time: '', duration_minutes: '', max_students: '', price: 0, category: '', level: '', meeting_link: '' })
-      fetchSessions()
+      setSuccess('Student assigned successfully!')
+      setShowAddStudent(false)
+      setFormData({ 
+        student_email: '', 
+        skill_name: '', 
+        current_level: 'Beginner', 
+        target_level: 'Intermediate', 
+        total_sessions: 5,
+        session_duration: 60,
+        price_per_session: 0,
+        notes: ''
+      })
+      setSearchResult(null)
+      fetchStudents()
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to schedule session')
+      setError(err.response?.data?.detail || 'Failed to assign student')
       setTimeout(() => setError(null), 3000)
     }
   }
 
-  const handleAddContent = async (e) => {
+  const handleSaveAvailability = async (e) => {
     e.preventDefault()
-    
-    if (!formData.content_title || !formData.content_type) {
-      setError('Please fill in title and content type')
-      setTimeout(() => setError(null), 3000)
-      return
-    }
-
     try {
-      setUploading(true)
-
-      let contentUrl = formData.content_url
-      
-      if (formData.content_file) {
-        const uploadFormData = new FormData()
-        uploadFormData.append('file', formData.content_file)
-        uploadFormData.append('trainer_id', user.id)
-        
-        const uploadResponse = await axios.post('http://localhost:8000/api/member/upload', uploadFormData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        })
-        contentUrl = uploadResponse.data.url
+      const settingsData = {
+        available_days: availability.available_days,
+        available_time_start: availability.available_time_start,
+        available_time_end: availability.available_time_end,
+        break_start: availability.break_start,
+        break_end: availability.break_end,
+        hourly_rate: availability.hourly_rate.toString(),
+        skills_taught: availability.skills_offered.join(', '),
+        about: trainerSettings.about,
+        expertise: trainerSettings.expertise,
+        qualifications: trainerSettings.qualifications
       }
-
-      await axios.post('http://localhost:8000/api/member/content', {
-        trainer_id: user.id,
-        title: formData.content_title,
-        description: formData.content_description,
-        content_type: formData.content_type,
-        content_url: contentUrl,
-        skill_name: formData.content_skill,
-        difficulty: formData.content_difficulty
-      })
-
-      setSuccess('Content uploaded successfully!')
-      setShowAddContent(false)
-      setFormData({ ...formData, content_title: '', content_description: '', content_url: '', content_type: '', content_skill: '', content_difficulty: '', content_file: null })
-      fetchContents()
-      setTimeout(() => setSuccess(null), 3000)
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to upload content')
-      setTimeout(() => setError(null), 3000)
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  const handleSaveSettings = async (e) => {
-    e.preventDefault()
-    try {
-      await axios.put(`http://localhost:8000/api/trainer/settings/${user.id}`, trainerSettings)
-      setSuccess('Settings saved successfully!')
+      
+      await axios.put(`http://localhost:8000/api/trainer/settings/${user.id}`, settingsData)
+      setSuccess('Availability and settings saved successfully!')
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to save settings')
@@ -213,50 +227,38 @@ function RegularTrainerDashboard({ user, onLogout }) {
     }
   }
 
-  const handleDeleteSession = async (sessionId) => {
-    if (window.confirm('Delete this session?')) {
+  const handleUpdateStatus = async (coachingId, status) => {
+    try {
+      await axios.put(`http://localhost:8000/api/trainer/personalized/status/${coachingId}`, { status })
+      fetchStudents()
+      setSuccess('Status updated successfully!')
+      setTimeout(() => setSuccess(null), 3000)
+    } catch (err) {
+      setError('Failed to update status')
+    }
+  }
+
+  const handleIncrementSession = async (coachingId) => {
+    try {
+      await axios.put(`http://localhost:8000/api/trainer/personalized/session/${coachingId}`)
+      fetchStudents()
+      setSuccess('Session count updated!')
+      setTimeout(() => setSuccess(null), 3000)
+    } catch (err) {
+      setError('Failed to update session count')
+    }
+  }
+
+  const handleDeleteCoaching = async (coachingId) => {
+    if (window.confirm('Remove this student from coaching?')) {
       try {
-        await axios.delete(`http://localhost:8000/api/trainer/session/${sessionId}`)
-        fetchSessions()
+        await axios.delete(`http://localhost:8000/api/trainer/personalized/coaching/${coachingId}`)
+        fetchStudents()
+        setSuccess('Student removed successfully!')
+        setTimeout(() => setSuccess(null), 3000)
       } catch (err) {
-        alert('Failed to delete session')
+        setError('Failed to remove student')
       }
-    }
-  }
-
-  const handleDeleteContent = async (contentId, e) => {
-    e?.stopPropagation()
-    if (window.confirm('Delete this content?')) {
-      try {
-        await axios.delete(`http://localhost:8000/api/member/content/${contentId}`)
-        fetchContents()
-      } catch (err) {
-        alert('Failed to delete content')
-      }
-    }
-  }
-
-  const handleViewContent = (contentUrl) => {
-    if (contentUrl) {
-      window.open(contentUrl, '_blank')
-    }
-  }
-
-  const getDifficultyBadge = (difficulty) => {
-    switch(difficulty) {
-      case 'Easy': return 'Easy'
-      case 'Medium': return 'Medium'
-      case 'Hard': return 'Hard'
-      default: return ''
-    }
-  }
-
-  const getDifficultyColor = (difficulty) => {
-    switch(difficulty) {
-      case 'Easy': return 'bg-green-500'
-      case 'Medium': return 'bg-yellow-500'
-      case 'Hard': return 'bg-red-500'
-      default: return 'bg-gray-500'
     }
   }
 
@@ -266,7 +268,7 @@ function RegularTrainerDashboard({ user, onLogout }) {
         <Navbar user={user} onLogout={onLogout} />
         <div className="flex items-center justify-center h-screen">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
             <p className="mt-4 text-gray-600">Loading user data...</p>
           </div>
         </div>
@@ -280,7 +282,7 @@ function RegularTrainerDashboard({ user, onLogout }) {
         <Navbar user={user} onLogout={onLogout} />
         <div className="flex items-center justify-center h-screen">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
             <p className="mt-4 text-gray-600">Loading...</p>
           </div>
         </div>
@@ -289,13 +291,13 @@ function RegularTrainerDashboard({ user, onLogout }) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50">
       <Navbar user={user} onLogout={onLogout} />
       
       <div className="max-w-7xl mx-auto pt-24 px-6 pb-12">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Trainer Dashboard</h1>
-          <p className="text-gray-500">Manage your sessions, content, and schedule</p>
+          <h1 className="text-2xl font-bold text-gray-900">🎯 Personalized Coaching Dashboard</h1>
+          <p className="text-gray-500">Manage one-on-one coaching sessions, availability, and students</p>
         </div>
 
         {success && (
@@ -306,238 +308,208 @@ function RegularTrainerDashboard({ user, onLogout }) {
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-4">
             {error}
+            <button onClick={() => setError(null)} className="ml-3 text-blue-600 hover:underline">
+              Dismiss
+            </button>
           </div>
         )}
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
-            <p className="text-sm text-gray-500">Total Sessions</p>
-            <p className="text-2xl font-bold text-blue-600">{sessions.length}</p>
+            <p className="text-sm text-gray-500">Total Students</p>
+            <p className="text-2xl font-bold text-purple-600">{students.length}</p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
-            <p className="text-sm text-gray-500">Upcoming</p>
+            <p className="text-sm text-gray-500">Active Sessions</p>
             <p className="text-2xl font-bold text-green-600">
-              {sessions.filter(s => s.status === 'scheduled' || s.status === 'ongoing').length}
+              {students.filter(s => s.status === 'active').length}
             </p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
-            <p className="text-sm text-gray-500">Content</p>
-            <p className="text-2xl font-bold text-purple-600">{contents.length}</p>
+            <p className="text-sm text-gray-500">Pending</p>
+            <p className="text-2xl font-bold text-yellow-600">
+              {students.filter(s => s.status === 'pending').length}
+            </p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
-            <p className="text-sm text-gray-500">Students</p>
-            <p className="text-2xl font-bold text-orange-600">
-              {sessions.reduce((acc, s) => acc + (s.enrolled_count || 0), 0)}
+            <p className="text-sm text-gray-500">Completed</p>
+            <p className="text-2xl font-bold text-blue-600">
+              {students.filter(s => s.status === 'completed').length}
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-2 mb-6">
           <button
-            onClick={() => {
-              setActiveTab('sessions')
-              setShowAddSession(false)
-              setShowAddContent(false)
-            }}
+            onClick={() => setActiveTab('students')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-              activeTab === 'sessions' 
-                ? 'bg-blue-600 text-white' 
+              activeTab === 'students' 
+                ? 'bg-purple-600 text-white' 
                 : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
             }`}
           >
-            Sessions
+            👥 My Students
           </button>
           <button
-            onClick={() => {
-              setActiveTab('content')
-              setShowAddSession(false)
-              setShowAddContent(false)
-            }}
+            onClick={() => setActiveTab('availability')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-              activeTab === 'content' 
-                ? 'bg-blue-600 text-white' 
+              activeTab === 'availability' 
+                ? 'bg-purple-600 text-white' 
                 : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
             }`}
           >
-            Content
+            📅 Availability & Pricing
           </button>
           <button
-            onClick={() => {
-              setActiveTab('settings')
-              setShowAddSession(false)
-              setShowAddContent(false)
-            }}
+            onClick={() => setActiveTab('settings')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
               activeTab === 'settings' 
-                ? 'bg-blue-600 text-white' 
+                ? 'bg-purple-600 text-white' 
                 : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
             }`}
           >
-            Settings
+            ⚙️ Profile Settings
           </button>
         </div>
 
-        {/* Sessions Tab */}
-        {activeTab === 'sessions' && (
+        {/* Students Tab */}
+        {activeTab === 'students' && (
           <>
             <button
-              onClick={() => setShowAddSession(!showAddSession)}
+              onClick={() => setShowAddStudent(!showAddStudent)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition mb-4 ${
-                showAddSession 
+                showAddStudent 
                   ? 'bg-red-600 hover:bg-red-700 text-white' 
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  : 'bg-purple-600 hover:bg-purple-700 text-white'
               }`}
             >
-              {showAddSession ? 'Cancel' : '+ Schedule Session'}
+              {showAddStudent ? '✕ Cancel' : '+ Assign New Student'}
             </button>
 
-            {showAddSession && (
+            {showAddStudent && (
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mb-6">
-                <h2 className="text-lg font-bold text-gray-800 mb-4">Schedule New Session</h2>
-                <form onSubmit={handleAddSession} className="space-y-4">
+                <h2 className="text-lg font-bold text-gray-800 mb-4">Assign One-on-One Coaching</h2>
+                <form onSubmit={handleAssignStudent} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Title <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Student Email *</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="email"
+                          name="student_email"
+                          value={formData.student_email}
+                          onChange={handleInputChange}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                          placeholder="student@email.com"
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSearchStudent}
+                          className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition text-sm font-medium"
+                        >
+                          Search
+                        </button>
+                      </div>
+                      {searchResult && (
+                        <div className="mt-2 p-2 bg-green-50 rounded-lg border border-green-200">
+                          <p className="text-sm text-green-700">✓ {searchResult.name} ({searchResult.email})</p>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Skill to Teach *</label>
                       <input
                         type="text"
-                        name="title"
-                        value={formData.title}
+                        name="skill_name"
+                        value={formData.skill_name}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                        placeholder="e.g., Python, Data Science"
                         required
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Category <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Current Level *</label>
                       <select
-                        name="category"
-                        value={formData.category}
+                        name="current_level"
+                        value={formData.current_level}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                         required
                       >
-                        <option value="">Select Category</option>
-                        <option value="Programming">Programming</option>
-                        <option value="Data Science">Data Science</option>
-                        <option value="Web Development">Web Development</option>
-                        <option value="Mobile Development">Mobile Development</option>
-                        <option value="Cloud Computing">Cloud Computing</option>
-                        <option value="DevOps">DevOps</option>
-                        <option value="Cybersecurity">Cybersecurity</option>
-                        <option value="Design">Design</option>
-                        <option value="Business">Business</option>
-                        <option value="Soft Skills">Soft Skills</option>
+                        {levels.map(level => (
+                          <option key={level} value={level}>{level}</option>
+                        ))}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Date <span className="text-red-500">*</span></label>
-                      <input
-                        type="date"
-                        name="session_date"
-                        value={formData.session_date}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Start Time <span className="text-red-500">*</span></label>
-                      <input
-                        type="time"
-                        name="start_time"
-                        value={formData.start_time}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">End Time <span className="text-red-500">*</span></label>
-                      <input
-                        type="time"
-                        name="end_time"
-                        value={formData.end_time}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
-                      <input
-                        type="number"
-                        name="duration_minutes"
-                        value={formData.duration_minutes}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        placeholder="Enter duration"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Max Students</label>
-                      <input
-                        type="number"
-                        name="max_students"
-                        value={formData.max_students}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        placeholder="Enter max students"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Price (₹)</label>
-                      <input
-                        type="number"
-                        name="price"
-                        value={formData.price}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        placeholder="0 for Free"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Level <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Target Level *</label>
                       <select
-                        name="level"
-                        value={formData.level}
+                        name="target_level"
+                        value={formData.target_level}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                         required
                       >
-                        <option value="">Select Level</option>
-                        <option value="Beginner">Beginner</option>
-                        <option value="Intermediate">Intermediate</option>
-                        <option value="Advanced">Advanced</option>
-                        <option value="All Levels">All Levels</option>
+                        {levels.map(level => (
+                          <option key={level} value={level}>{level}</option>
+                        ))}
                       </select>
                     </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Meeting Link</label>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Total Sessions *</label>
                       <input
-                        type="url"
-                        name="meeting_link"
-                        value={formData.meeting_link}
+                        type="number"
+                        name="total_sessions"
+                        value={formData.total_sessions}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        placeholder="https://meet.google.com/..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                        min="1"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Session Duration (minutes)</label>
+                      <input
+                        type="number"
+                        name="session_duration"
+                        value={formData.session_duration}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                        min="15"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Price per Session (₹)</label>
+                      <input
+                        type="number"
+                        name="price_per_session"
+                        value={formData.price_per_session}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                        placeholder="0 for free"
+                        min="0"
                       />
                     </div>
                     <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                       <textarea
-                        name="description"
-                        value={formData.description}
+                        name="notes"
+                        value={formData.notes}
                         onChange={handleInputChange}
                         rows="2"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                        placeholder="Any special notes about this coaching..."
                       />
                     </div>
                   </div>
                   <button
                     type="submit"
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium"
+                    className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition text-sm font-medium"
+                    disabled={!searchResult}
                   >
-                    Schedule Session
+                    Assign Student
                   </button>
                 </form>
               </div>
@@ -545,50 +517,76 @@ function RegularTrainerDashboard({ user, onLogout }) {
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-bold text-gray-800">Your Sessions</h2>
-                <span className="text-sm text-gray-500">{sessions.length} sessions</span>
+                <h2 className="text-lg font-bold text-gray-800">Your Coaching Students</h2>
+                <span className="text-sm text-gray-500">{students.length} students</span>
               </div>
-              {sessions.length === 0 ? (
-                <p className="text-gray-500 text-center py-6 text-sm">No sessions scheduled yet.</p>
+              {students.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-500 text-lg">No coaching students assigned yet.</p>
+                  <p className="text-gray-400 text-sm mt-1">Click "Assign New Student" to start coaching.</p>
+                </div>
               ) : (
-                <div className="space-y-3">
-                  {sessions.map((session) => (
-                    <div key={session.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                <div className="space-y-4">
+                  {students.map((student) => (
+                    <div key={student.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
                       <div className="flex flex-wrap justify-between items-start gap-4">
                         <div className="flex-1">
                           <div className="flex flex-wrap items-center gap-2 mb-1">
-                            <h3 className="font-semibold text-gray-800 text-sm">{session.title}</h3>
+                            <h3 className="font-semibold text-gray-800">{student.student_name}</h3>
                             <span className={`text-xs px-2 py-0.5 rounded-full ${
-                              session.status === 'scheduled' ? 'bg-blue-100 text-blue-700' :
-                              session.status === 'ongoing' ? 'bg-green-100 text-green-700' :
-                              session.status === 'completed' ? 'bg-gray-100 text-gray-700' :
+                              student.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                              student.status === 'active' ? 'bg-green-100 text-green-700' :
+                              student.status === 'completed' ? 'bg-blue-100 text-blue-700' :
                               'bg-red-100 text-red-700'
                             }`}>
-                              {session.status}
-                            </span>
-                            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
-                              {session.level}
+                              {student.status.toUpperCase()}
                             </span>
                           </div>
-                          <p className="text-sm text-gray-500">{session.description}</p>
-                          <div className="flex flex-wrap gap-4 mt-2 text-xs text-gray-600">
-                            <span>{new Date(session.session_date).toLocaleDateString()}</span>
-                            <span>{session.start_time} - {session.end_time}</span>
-                            <span>{session.enrolled_count || 0}/{session.max_students} students</span>
-                            {session.price > 0 && <span>₹{session.price}</span>}
-                            {session.meeting_link && (
-                              <a href={session.meeting_link} target="_blank" rel="noopener" className="text-blue-600 hover:underline">
-                                Join
-                              </a>
+                          <p className="text-sm text-gray-500">{student.student_email}</p>
+                          <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-600">
+                            <span>🎯 {student.skill_name}</span>
+                            <span>📊 {student.current_level} → {student.target_level}</span>
+                            <span>📝 {student.session_count}/{student.total_sessions} sessions</span>
+                            {student.price_per_session > 0 && (
+                              <span>💰 ₹{student.price_per_session}/session</span>
                             )}
                           </div>
+                          {student.notes && (
+                            <p className="text-sm text-gray-500 mt-2">📌 {student.notes}</p>
+                          )}
                         </div>
-                        <button
-                          onClick={() => handleDeleteSession(session.id)}
-                          className="text-red-500 hover:text-red-700 text-sm"
-                        >
-                          Cancel
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          {student.status === 'pending' && (
+                            <button
+                              onClick={() => handleUpdateStatus(student.id, 'active')}
+                              className="bg-green-500 text-white px-3 py-1.5 rounded text-sm hover:bg-green-600 transition"
+                            >
+                              Start Coaching
+                            </button>
+                          )}
+                          {student.status === 'active' && (
+                            <>
+                              <button
+                                onClick={() => handleIncrementSession(student.id)}
+                                className="bg-blue-500 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-600 transition"
+                              >
+                                + Session
+                              </button>
+                              <button
+                                onClick={() => handleUpdateStatus(student.id, 'completed')}
+                                className="bg-purple-500 text-white px-3 py-1.5 rounded text-sm hover:bg-purple-600 transition"
+                              >
+                                Complete
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={() => handleDeleteCoaching(student.id)}
+                            className="bg-red-500 text-white px-3 py-1.5 rounded text-sm hover:bg-red-600 transition"
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -598,254 +596,11 @@ function RegularTrainerDashboard({ user, onLogout }) {
           </>
         )}
 
-        {/* Content Tab - Click Card to Open */}
-        {activeTab === 'content' && (
-          <>
-            <button
-              onClick={() => setShowAddContent(!showAddContent)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition mb-4 ${
-                showAddContent 
-                  ? 'bg-red-600 hover:bg-red-700 text-white' 
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
-              }`}
-            >
-              {showAddContent ? 'Cancel' : '+ Add Content'}
-            </button>
-
-            {showAddContent && (
-              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mb-6">
-                <h2 className="text-lg font-bold text-gray-800 mb-4">Add New Content</h2>
-                <form onSubmit={handleAddContent} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Title <span className="text-red-500">*</span></label>
-                      <input
-                        type="text"
-                        name="content_title"
-                        value={formData.content_title}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Content Type <span className="text-red-500">*</span></label>
-                      <select
-                        name="content_type"
-                        value={formData.content_type}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        required
-                      >
-                        <option value="">Select Type</option>
-                        {contentTypes.map(type => (
-                          <option key={type} value={type}>
-                            {type.charAt(0).toUpperCase() + type.slice(1)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Skill</label>
-                      <input
-                        type="text"
-                        name="content_skill"
-                        value={formData.content_skill}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        placeholder="e.g., Python, SQL"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Difficulty</label>
-                      <select
-                        name="content_difficulty"
-                        value={formData.content_difficulty}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                      >
-                        <option value="">Select Difficulty</option>
-                        <option value="Easy">Easy</option>
-                        <option value="Medium">Medium</option>
-                        <option value="Hard">Hard</option>
-                      </select>
-                    </div>
-                    
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Upload File or Paste Link</label>
-                      <div className="flex gap-3">
-                        <input
-                          type="url"
-                          name="content_url"
-                          value={formData.content_url}
-                          onChange={handleInputChange}
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                          placeholder="Paste URL here"
-                        />
-                        <div className="relative">
-                          <input
-                            type="file"
-                            name="content_file"
-                            onChange={handleInputChange}
-                            className="absolute inset-0 opacity-0 cursor-pointer w-full"
-                          />
-                          <button
-                            type="button"
-                            className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition text-sm font-medium whitespace-nowrap"
-                          >
-                            Browse
-                          </button>
-                        </div>
-                      </div>
-                      {formData.content_file && (
-                        <p className="text-xs text-green-600 mt-1">Selected: {formData.content_file.name}</p>
-                      )}
-                    </div>
-                    
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                      <textarea
-                        name="content_description"
-                        value={formData.content_description}
-                        onChange={handleInputChange}
-                        rows="2"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                      />
-                    </div>
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={uploading}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50"
-                  >
-                    {uploading ? 'Uploading...' : 'Add Content'}
-                  </button>
-                </form>
-              </div>
-            )}
-
-            {/* Content Cards - Click to Open */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-              {contents.length === 0 ? (
-                <div className="col-span-full text-center py-16">
-                  <p className="text-gray-500 text-xl">No content added yet.</p>
-                  <p className="text-gray-400 mt-2">Click "Add Content" to create your first material.</p>
-                </div>
-              ) : (
-                contents.map((content) => (
-                  <div 
-                    key={content.id} 
-                    className="group bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden cursor-pointer hover:-translate-y-1"
-                    onClick={() => content.content_url && handleViewContent(content.content_url)}
-                  >
-                    {/* Card Image / Thumbnail */}
-                    <div className="relative aspect-video bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                      <span className="text-gray-400 text-sm font-medium">No preview</span>
-                      
-                      {/* Difficulty Badge on LEFT side */}
-                      {content.difficulty && (
-                        <div className={`absolute top-2 left-2 px-3 py-1 rounded-full text-xs font-bold text-white shadow-lg ${getDifficultyColor(content.difficulty)}`}>
-                          {getDifficultyBadge(content.difficulty)}
-                        </div>
-                      )}
-
-                      {/* Content Type Badge - Bottom Left */}
-                      <div className="absolute bottom-2 left-2 px-3 py-1 rounded-full text-xs font-medium text-white bg-black/50 backdrop-blur-sm">
-                        {content.content_type}
-                      </div>
-
-                      {/* Delete Button on RIGHT side */}
-                      <button
-                        onClick={(e) => handleDeleteContent(content.id, e)}
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-red-500 hover:bg-red-600 text-white rounded-full p-2 shadow-lg"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
-
-                    {/* Content Details */}
-                    <div className="p-4">
-                      {/* Title */}
-                      <h3 className="font-semibold text-gray-800 text-sm line-clamp-2">
-                        {content.title}
-                      </h3>
-                      
-                      {/* Skill Name */}
-                      {content.skill_name && (
-                        <p className="text-xs text-blue-600 font-medium mt-1">
-                          {content.skill_name}
-                        </p>
-                      )}
-                      
-                      {/* Content Type & Difficulty in one line */}
-                      <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                        <span className="capitalize">{content.content_type}</span>
-                        <span className="text-gray-300">•</span>
-                        <span>{content.difficulty || 'N/A'}</span>
-                      </div>
-
-                      {/* Date */}
-                      <span className="text-xs text-gray-400 block mt-1">
-                        {content.created_at ? new Date(content.created_at).toLocaleDateString() : ''}
-                      </span>
-
-                      {/* Description */}
-                      {content.description && (
-                        <p className="text-xs text-gray-500 mt-2 line-clamp-2">
-                          {content.description}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </>
-        )}
-
-        {/* Settings Tab */}
-        {activeTab === 'settings' && (
+        {/* Availability Tab */}
+        {activeTab === 'availability' && (
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">Trainer Settings</h2>
-            <form onSubmit={handleSaveSettings} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">About</label>
-                  <textarea
-                    name="about"
-                    value={trainerSettings.about}
-                    onChange={handleSettingsChange}
-                    rows="3"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="Tell students about yourself..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Expertise</label>
-                  <input
-                    type="text"
-                    name="expertise"
-                    value={trainerSettings.expertise}
-                    onChange={handleSettingsChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="e.g., Python, Data Science"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Qualifications</label>
-                  <input
-                    type="text"
-                    name="qualifications"
-                    value={trainerSettings.qualifications}
-                    onChange={handleSettingsChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="e.g., M.Tech, 5 years experience"
-                  />
-                </div>
-              </div>
-
+            <h2 className="text-lg font-bold text-gray-800 mb-4">📅 Availability & Pricing</h2>
+            <form onSubmit={handleSaveAvailability} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Available Days</label>
                 <div className="flex flex-wrap gap-2">
@@ -855,8 +610,8 @@ function RegularTrainerDashboard({ user, onLogout }) {
                       type="button"
                       onClick={() => handleDayToggle(day)}
                       className={`px-3 py-1.5 rounded-lg text-sm transition ${
-                        trainerSettings.available_days?.includes(day)
-                          ? 'bg-blue-600 text-white'
+                        availability.available_days.includes(day)
+                          ? 'bg-purple-600 text-white'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }`}
                     >
@@ -872,10 +627,9 @@ function RegularTrainerDashboard({ user, onLogout }) {
                   <input
                     type="time"
                     name="available_time_start"
-                    value={trainerSettings.available_time_start}
-                    onChange={handleSettingsChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="Select time"
+                    value={availability.available_time_start}
+                    onChange={handleAvailabilityChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                   />
                 </div>
                 <div>
@@ -883,10 +637,9 @@ function RegularTrainerDashboard({ user, onLogout }) {
                   <input
                     type="time"
                     name="available_time_end"
-                    value={trainerSettings.available_time_end}
-                    onChange={handleSettingsChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="Select time"
+                    value={availability.available_time_end}
+                    onChange={handleAvailabilityChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                   />
                 </div>
                 <div>
@@ -894,10 +647,9 @@ function RegularTrainerDashboard({ user, onLogout }) {
                   <input
                     type="time"
                     name="break_start"
-                    value={trainerSettings.break_start}
-                    onChange={handleSettingsChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="Select time"
+                    value={availability.break_start}
+                    onChange={handleAvailabilityChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                   />
                 </div>
                 <div>
@@ -905,19 +657,121 @@ function RegularTrainerDashboard({ user, onLogout }) {
                   <input
                     type="time"
                     name="break_end"
-                    value={trainerSettings.break_end}
-                    onChange={handleSettingsChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="Select time"
+                    value={availability.break_end}
+                    onChange={handleAvailabilityChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Hourly Rate (₹/hour)</label>
+                  <input
+                    type="number"
+                    name="hourly_rate"
+                    value={availability.hourly_rate}
+                    onChange={handleAvailabilityChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                    placeholder="0 for free"
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Skills Offered</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={skillInput}
+                      onChange={(e) => setSkillInput(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                      placeholder="Add skill..."
+                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddSkill())}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddSkill}
+                      className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition text-sm font-medium"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {availability.skills_offered.map((skill, index) => (
+                      <span
+                        key={index}
+                        className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm flex items-center gap-2"
+                      >
+                        {skill}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSkill(skill)}
+                          className="text-purple-500 hover:text-purple-700"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition text-sm font-medium"
+              >
+                Save Availability & Pricing
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Settings Tab */}
+        {activeTab === 'settings' && (
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">⚙️ Profile Settings</h2>
+            <form onSubmit={handleSaveAvailability} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">About Me</label>
+                  <textarea
+                    name="about"
+                    value={trainerSettings.about}
+                    onChange={(e) => setTrainerSettings(prev => ({ ...prev, about: e.target.value }))}
+                    rows="3"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                    placeholder="Tell students about your coaching style and experience..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Expertise</label>
+                  <input
+                    type="text"
+                    name="expertise"
+                    value={trainerSettings.expertise}
+                    onChange={(e) => setTrainerSettings(prev => ({ ...prev, expertise: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                    placeholder="e.g., Python, Data Science, Web Development"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Qualifications</label>
+                  <input
+                    type="text"
+                    name="qualifications"
+                    value={trainerSettings.qualifications}
+                    onChange={(e) => setTrainerSettings(prev => ({ ...prev, qualifications: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                    placeholder="e.g., M.Tech, 5+ years experience"
                   />
                 </div>
               </div>
 
               <button
                 type="submit"
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium"
+                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition text-sm font-medium"
               >
-                Save Settings
+                Save Profile
               </button>
             </form>
           </div>
@@ -927,4 +781,4 @@ function RegularTrainerDashboard({ user, onLogout }) {
   )
 }
 
-export default RegularTrainerDashboard
+export default PersonalizedTrainerDashboard

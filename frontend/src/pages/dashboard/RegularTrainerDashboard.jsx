@@ -9,12 +9,16 @@ function RegularTrainerDashboard({ user, onLogout }) {
   const [loading, setLoading] = useState(true)
   const [showAddSession, setShowAddSession] = useState(false)
   const [showAddContent, setShowAddContent] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
   const [contents, setContents] = useState([])
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
   const [activeTab, setActiveTab] = useState('sessions')
+  const [uploadMethod, setUploadMethod] = useState('link')
   const [uploading, setUploading] = useState(false)
+  const [coachingStudents, setCoachingStudents] = useState([])
+  const [showAssignStudent, setShowAssignStudent] = useState(false)
+  const [studentSearch, setStudentSearch] = useState('')
+  const [searchResult, setSearchResult] = useState(null)
 
   const [formData, setFormData] = useState({
     title: '',
@@ -37,6 +41,17 @@ function RegularTrainerDashboard({ user, onLogout }) {
     content_file: null
   })
 
+  const [assignForm, setAssignForm] = useState({
+    student_id: '',
+    student_name: '',
+    student_email: '',
+    skill_name: '',
+    current_level: 'Beginner',
+    target_level: 'Intermediate',
+    total_sessions: 5,
+    notes: ''
+  })
+
   const [trainerSettings, setTrainerSettings] = useState({
     available_days: [],
     available_time_start: '',
@@ -45,19 +60,21 @@ function RegularTrainerDashboard({ user, onLogout }) {
     break_end: '',
     about: '',
     expertise: '',
-    qualifications: ''
+    qualifications: '',
+    hourly_rate: '',
+    skills_taught: ''
   })
 
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
   const contentTypes = ['video', 'pdf', 'document', 'notes', 'quiz', 'assignment', 'presentation', 'other']
+  const levels = ['Beginner', 'Intermediate', 'Advanced', 'Expert']
 
   useEffect(() => {
     if (user && user.id) {
       fetchSessions()
       fetchContents()
       fetchTrainerSettings()
-    } else {
-      setLoading(false)
+      fetchCoachingStudents()
     }
   }, [user])
 
@@ -91,7 +108,9 @@ function RegularTrainerDashboard({ user, onLogout }) {
           break_end: response.data.break_end || '',
           about: response.data.about || '',
           expertise: response.data.expertise || '',
-          qualifications: response.data.qualifications || ''
+          qualifications: response.data.qualifications || '',
+          hourly_rate: response.data.hourly_rate || '',
+          skills_taught: response.data.skills_taught || ''
         })
       }
     } catch (err) {
@@ -101,11 +120,28 @@ function RegularTrainerDashboard({ user, onLogout }) {
     }
   }
 
+  const fetchCoachingStudents = async () => {
+    try {
+      const response = await axios.get(`http://localhost:8000/api/trainer/personalized/students/${user.id}`)
+      setCoachingStudents(response.data)
+    } catch (err) {
+      console.error('Error fetching coaching students:', err)
+    }
+  }
+
   const handleInputChange = (e) => {
     const { name, value, type, files } = e.target
     setFormData(prev => ({
       ...prev,
       [name]: type === 'file' ? files[0] : value
+    }))
+  }
+
+  const handleAssignInputChange = (e) => {
+    const { name, value } = e.target
+    setAssignForm(prev => ({
+      ...prev,
+      [name]: value
     }))
   }
 
@@ -139,8 +175,8 @@ function RegularTrainerDashboard({ user, onLogout }) {
       await axios.post('http://localhost:8000/api/trainer/session', {
         ...formData,
         trainer_id: user.id,
-        duration_minutes: parseInt(formData.duration_minutes) || 0,
-        max_students: parseInt(formData.max_students) || 0
+        duration_minutes: parseInt(formData.duration_minutes) || 60,
+        max_students: parseInt(formData.max_students) || 10
       })
       setSuccess('Session scheduled successfully!')
       setShowAddSession(false)
@@ -167,7 +203,7 @@ function RegularTrainerDashboard({ user, onLogout }) {
 
       let contentUrl = formData.content_url
       
-      if (formData.content_file) {
+      if (uploadMethod === 'file' && formData.content_file) {
         const uploadFormData = new FormData()
         uploadFormData.append('file', formData.content_file)
         uploadFormData.append('trainer_id', user.id)
@@ -213,6 +249,67 @@ function RegularTrainerDashboard({ user, onLogout }) {
     }
   }
 
+  const handleSearchStudent = async () => {
+    if (!studentSearch) {
+      setError('Please enter an email')
+      return
+    }
+    try {
+      const response = await axios.get(`http://localhost:8000/api/student/find/${studentSearch}`)
+      setSearchResult(response.data)
+      setAssignForm(prev => ({
+        ...prev,
+        student_id: response.data.id,
+        student_name: response.data.name,
+        student_email: response.data.email
+      }))
+      setError(null)
+    } catch (err) {
+      setError('Student not found with this email')
+      setSearchResult(null)
+    }
+  }
+
+  const handleAssignStudent = async (e) => {
+    e.preventDefault()
+    if (!assignForm.student_id || !assignForm.skill_name) {
+      setError('Please select a student and skill')
+      return
+    }
+
+    try {
+      await axios.post('http://localhost:8000/api/trainer/personalized/assign', {
+        trainer_id: user.id,
+        student_id: assignForm.student_id,
+        student_name: assignForm.student_name,
+        student_email: assignForm.student_email,
+        skill_name: assignForm.skill_name,
+        current_level: assignForm.current_level,
+        target_level: assignForm.target_level,
+        total_sessions: parseInt(assignForm.total_sessions) || 5,
+        notes: assignForm.notes
+      })
+      setSuccess('Student assigned successfully!')
+      setShowAssignStudent(false)
+      setStudentSearch('')
+      setSearchResult(null)
+      setAssignForm({
+        student_id: '',
+        student_name: '',
+        student_email: '',
+        skill_name: '',
+        current_level: 'Beginner',
+        target_level: 'Intermediate',
+        total_sessions: 5,
+        notes: ''
+      })
+      fetchCoachingStudents()
+      setTimeout(() => setSuccess(null), 3000)
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to assign student')
+    }
+  }
+
   const handleDeleteSession = async (sessionId) => {
     if (window.confirm('Delete this session?')) {
       try {
@@ -224,8 +321,7 @@ function RegularTrainerDashboard({ user, onLogout }) {
     }
   }
 
-  const handleDeleteContent = async (contentId, e) => {
-    e?.stopPropagation()
+  const handleDeleteContent = async (contentId) => {
     if (window.confirm('Delete this content?')) {
       try {
         await axios.delete(`http://localhost:8000/api/member/content/${contentId}`)
@@ -236,55 +332,25 @@ function RegularTrainerDashboard({ user, onLogout }) {
     }
   }
 
-  const handleCardClick = (content) => {
-    if (content.content_url) {
-      window.open(content.content_url, '_blank')
+  const handleDeleteCoaching = async (coachingId) => {
+    if (window.confirm('Remove this student from coaching?')) {
+      try {
+        await axios.delete(`http://localhost:8000/api/trainer/personalized/coaching/${coachingId}`)
+        fetchCoachingStudents()
+      } catch (err) {
+        alert('Failed to remove student')
+      }
     }
   }
 
-  const getDifficultyColor = (difficulty) => {
-    switch(difficulty) {
-      case 'Easy': return 'bg-green-500'
-      case 'Medium': return 'bg-yellow-500'
-      case 'Hard': return 'bg-red-500'
-      default: return 'bg-gray-500'
-    }
-  }
-
-  const getDifficultyBadge = (difficulty) => {
-    switch(difficulty) {
-      case 'Easy': return 'Easy'
-      case 'Medium': return 'Medium'
-      case 'Hard': return 'Hard'
-      default: return ''
-    }
-  }
-
-  const getContentIcon = (type) => {
-    switch(type) {
-      case 'video': return '🎬'
-      case 'pdf': return '📄'
-      case 'document': return '📄'
-      case 'image': return '🖼️'
-      case 'quiz': return '📝'
-      case 'assignment': return '📋'
-      case 'notes': return '📓'
-      case 'presentation': return '📊'
-      default: return '📎'
-    }
-  }
-
-  const getContentLabel = (type) => {
-    switch(type) {
-      case 'video': return 'Video'
-      case 'pdf': return 'PDF'
-      case 'document': return 'Document'
-      case 'image': return 'Image'
-      case 'quiz': return 'Quiz'
-      case 'assignment': return 'Assignment'
-      case 'notes': return 'Notes'
-      case 'presentation': return 'Presentation'
-      default: return 'File'
+  const handleUpdateCoachingStatus = async (coachingId, status) => {
+    try {
+      await axios.put(`http://localhost:8000/api/trainer/personalized/status/${coachingId}`, { status })
+      fetchCoachingStudents()
+      setSuccess('Status updated successfully!')
+      setTimeout(() => setSuccess(null), 3000)
+    } catch (err) {
+      setError('Failed to update status')
     }
   }
 
@@ -322,8 +388,8 @@ function RegularTrainerDashboard({ user, onLogout }) {
       
       <div className="max-w-7xl mx-auto pt-24 px-6 pb-12">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Trainer Dashboard</h1>
-          <p className="text-gray-500">Manage your sessions, content, and schedule</p>
+          <h1 className="text-2xl font-bold text-gray-900">Regular Trainer Dashboard</h1>
+          <p className="text-gray-500">Manage group sessions, content library, and student coaching</p>
         </div>
 
         {success && (
@@ -334,18 +400,21 @@ function RegularTrainerDashboard({ user, onLogout }) {
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-4">
             {error}
+            <button onClick={() => setError(null)} className="ml-3 text-blue-600 hover:underline">
+              Dismiss
+            </button>
           </div>
         )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
-            <p className="text-sm text-gray-500">Total Sessions</p>
+            <p className="text-sm text-gray-500">Sessions</p>
             <p className="text-2xl font-bold text-blue-600">{sessions.length}</p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
             <p className="text-sm text-gray-500">Upcoming</p>
             <p className="text-2xl font-bold text-green-600">
-              {sessions.filter(s => s.status === 'scheduled' || s.status === 'ongoing').length}
+              {sessions.filter(s => s.status === 'scheduled').length}
             </p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
@@ -353,8 +422,12 @@ function RegularTrainerDashboard({ user, onLogout }) {
             <p className="text-2xl font-bold text-purple-600">{contents.length}</p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
+            <p className="text-sm text-gray-500">Coaching</p>
+            <p className="text-2xl font-bold text-orange-600">{coachingStudents.length}</p>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
             <p className="text-sm text-gray-500">Students</p>
-            <p className="text-2xl font-bold text-orange-600">
+            <p className="text-2xl font-bold text-cyan-600">
               {sessions.reduce((acc, s) => acc + (s.enrolled_count || 0), 0)}
             </p>
           </div>
@@ -362,46 +435,44 @@ function RegularTrainerDashboard({ user, onLogout }) {
 
         <div className="flex flex-wrap gap-2 mb-6">
           <button
-            onClick={() => {
-              setActiveTab('sessions')
-              setShowAddSession(false)
-              setShowAddContent(false)
-            }}
+            onClick={() => setActiveTab('sessions')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
               activeTab === 'sessions' 
                 ? 'bg-blue-600 text-white' 
                 : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
             }`}
           >
-            Sessions
+            📅 Sessions
           </button>
           <button
-            onClick={() => {
-              setActiveTab('content')
-              setShowAddSession(false)
-              setShowAddContent(false)
-            }}
+            onClick={() => setActiveTab('content')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
               activeTab === 'content' 
-                ? 'bg-blue-600 text-white' 
+                ? 'bg-purple-600 text-white' 
                 : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
             }`}
           >
-            Content
+            📚 Content Library
           </button>
           <button
-            onClick={() => {
-              setActiveTab('settings')
-              setShowAddSession(false)
-              setShowAddContent(false)
-            }}
+            onClick={() => setActiveTab('coaching')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-              activeTab === 'settings' 
-                ? 'bg-blue-600 text-white' 
+              activeTab === 'coaching' 
+                ? 'bg-orange-600 text-white' 
                 : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
             }`}
           >
-            Settings
+            👥 Coaching Students
+          </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+              activeTab === 'settings' 
+                ? 'bg-gray-800 text-white' 
+                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+            }`}
+          >
+            ⚙️ Settings
           </button>
         </div>
 
@@ -416,16 +487,16 @@ function RegularTrainerDashboard({ user, onLogout }) {
                   : 'bg-blue-600 hover:bg-blue-700 text-white'
               }`}
             >
-              {showAddSession ? 'Cancel' : '+ Schedule Session'}
+              {showAddSession ? '✕ Cancel' : '+ Schedule Group Session'}
             </button>
 
             {showAddSession && (
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mb-6">
-                <h2 className="text-lg font-bold text-gray-800 mb-4">Schedule New Session</h2>
+                <h2 className="text-lg font-bold text-gray-800 mb-4">Schedule New Group Session</h2>
                 <form onSubmit={handleAddSession} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Title <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
                       <input
                         type="text"
                         name="title"
@@ -436,7 +507,7 @@ function RegularTrainerDashboard({ user, onLogout }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Category <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
                       <select
                         name="category"
                         value={formData.category}
@@ -458,7 +529,7 @@ function RegularTrainerDashboard({ user, onLogout }) {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Date <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
                       <input
                         type="date"
                         name="session_date"
@@ -469,7 +540,7 @@ function RegularTrainerDashboard({ user, onLogout }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Start Time <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Start Time *</label>
                       <input
                         type="time"
                         name="start_time"
@@ -480,7 +551,7 @@ function RegularTrainerDashboard({ user, onLogout }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">End Time <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">End Time *</label>
                       <input
                         type="time"
                         name="end_time"
@@ -491,17 +562,6 @@ function RegularTrainerDashboard({ user, onLogout }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
-                      <input
-                        type="number"
-                        name="duration_minutes"
-                        value={formData.duration_minutes}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        placeholder="Enter duration"
-                      />
-                    </div>
-                    <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Max Students</label>
                       <input
                         type="number"
@@ -509,7 +569,7 @@ function RegularTrainerDashboard({ user, onLogout }) {
                         value={formData.max_students}
                         onChange={handleInputChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        placeholder="Enter max students"
+                        placeholder="10"
                       />
                     </div>
                     <div>
@@ -524,7 +584,7 @@ function RegularTrainerDashboard({ user, onLogout }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Level <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Level *</label>
                       <select
                         name="level"
                         value={formData.level}
@@ -573,7 +633,7 @@ function RegularTrainerDashboard({ user, onLogout }) {
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-bold text-gray-800">Your Sessions</h2>
+                <h2 className="text-lg font-bold text-gray-800">Your Group Sessions</h2>
                 <span className="text-sm text-gray-500">{sessions.length} sessions</span>
               </div>
               {sessions.length === 0 ? (
@@ -600,13 +660,13 @@ function RegularTrainerDashboard({ user, onLogout }) {
                           </div>
                           <p className="text-sm text-gray-500">{session.description}</p>
                           <div className="flex flex-wrap gap-4 mt-2 text-xs text-gray-600">
-                            <span>{new Date(session.session_date).toLocaleDateString()}</span>
-                            <span>{session.start_time} - {session.end_time}</span>
-                            <span>{session.enrolled_count || 0}/{session.max_students} students</span>
-                            {session.price > 0 && <span>₹{session.price}</span>}
+                            <span>📅 {new Date(session.session_date).toLocaleDateString()}</span>
+                            <span>🕐 {session.start_time} - {session.end_time}</span>
+                            <span>👥 {session.enrolled_count || 0}/{session.max_students}</span>
+                            {session.price > 0 && <span>💰 ₹{session.price}</span>}
                             {session.meeting_link && (
                               <a href={session.meeting_link} target="_blank" rel="noopener" className="text-blue-600 hover:underline">
-                                Join
+                                🔗 Join
                               </a>
                             )}
                           </div>
@@ -634,35 +694,61 @@ function RegularTrainerDashboard({ user, onLogout }) {
               className={`px-4 py-2 rounded-lg text-sm font-medium transition mb-4 ${
                 showAddContent 
                   ? 'bg-red-600 hover:bg-red-700 text-white' 
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  : 'bg-purple-600 hover:bg-purple-700 text-white'
               }`}
             >
-              {showAddContent ? 'Cancel' : '+ Add Content'}
+              {showAddContent ? '✕ Cancel' : '+ Upload Content'}
             </button>
 
             {showAddContent && (
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mb-6">
-                <h2 className="text-lg font-bold text-gray-800 mb-4">Add New Content</h2>
+                <h2 className="text-lg font-bold text-gray-800 mb-4">Upload Learning Content</h2>
+                
+                <div className="flex gap-2 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setUploadMethod('link')}
+                    className={`px-3 py-1.5 rounded-lg text-sm transition ${
+                      uploadMethod === 'link' 
+                        ? 'bg-purple-600 text-white' 
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    URL Link
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUploadMethod('file')}
+                    className={`px-3 py-1.5 rounded-lg text-sm transition ${
+                      uploadMethod === 'file' 
+                        ? 'bg-purple-600 text-white' 
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    Upload File
+                  </button>
+                </div>
+
                 <form onSubmit={handleAddContent} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Title <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
                       <input
                         type="text"
                         name="content_title"
                         value={formData.content_title}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                         required
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Content Type <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Content Type *</label>
                       <select
                         name="content_type"
                         value={formData.content_type}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                         required
                       >
                         <option value="">Select Type</option>
@@ -680,7 +766,7 @@ function RegularTrainerDashboard({ user, onLogout }) {
                         name="content_skill"
                         value={formData.content_skill}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                         placeholder="e.g., Python, SQL"
                       />
                     </div>
@@ -690,45 +776,39 @@ function RegularTrainerDashboard({ user, onLogout }) {
                         name="content_difficulty"
                         value={formData.content_difficulty}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                       >
                         <option value="">Select Difficulty</option>
-                        <option value="Easy">Easy</option>
-                        <option value="Medium">Medium</option>
-                        <option value="Hard">Hard</option>
+                        <option value="Beginner">Beginner</option>
+                        <option value="Intermediate">Intermediate</option>
+                        <option value="Advanced">Advanced</option>
                       </select>
                     </div>
                     
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Upload File or Paste Link</label>
-                      <div className="flex gap-3">
+                    {uploadMethod === 'link' ? (
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Content URL</label>
                         <input
                           type="url"
                           name="content_url"
                           value={formData.content_url}
                           onChange={handleInputChange}
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                          placeholder="Paste URL here"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                          placeholder="https://www.youtube.com/watch?v=... or any URL"
                         />
-                        <div className="relative">
-                          <input
-                            type="file"
-                            name="content_file"
-                            onChange={handleInputChange}
-                            className="absolute inset-0 opacity-0 cursor-pointer w-full"
-                          />
-                          <button
-                            type="button"
-                            className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition text-sm font-medium whitespace-nowrap"
-                          >
-                            Browse
-                          </button>
-                        </div>
                       </div>
-                      {formData.content_file && (
-                        <p className="text-xs text-green-600 mt-1">Selected: {formData.content_file.name}</p>
-                      )}
-                    </div>
+                    ) : (
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Upload File</label>
+                        <input
+                          type="file"
+                          name="content_file"
+                          onChange={handleInputChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">Supports: Videos, PDFs, Images, Documents, Quizzes (Max 500MB)</p>
+                      </div>
+                    )}
                     
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
@@ -737,94 +817,251 @@ function RegularTrainerDashboard({ user, onLogout }) {
                         value={formData.content_description}
                         onChange={handleInputChange}
                         rows="2"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                       />
                     </div>
                   </div>
                   <button
                     type="submit"
                     disabled={uploading}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50"
+                    className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition text-sm font-medium disabled:opacity-50"
                   >
-                    {uploading ? 'Uploading...' : 'Add Content'}
+                    {uploading ? 'Uploading...' : 'Upload Content'}
                   </button>
                 </form>
               </div>
             )}
 
-            {/* Content Cards with Icons */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-bold text-gray-800">Your Content Library</h2>
+                <span className="text-sm text-gray-500">{contents.length} items</span>
+              </div>
               {contents.length === 0 ? (
-                <div className="col-span-full text-center py-16">
-                  <p className="text-gray-500 text-xl">No content added yet.</p>
-                  <p className="text-gray-400 mt-2">Click "Add Content" to create your first material.</p>
-                </div>
+                <p className="text-gray-500 text-center py-6 text-sm">No content uploaded yet.</p>
               ) : (
-                contents.map((content) => (
-                  <div 
-                    key={content.id} 
-                    className="group bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden cursor-pointer hover:-translate-y-1"
-                    onClick={() => handleCardClick(content)}
-                  >
-                    {/* Card Image / Thumbnail with Icon */}
-                    <div className="relative aspect-video bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                      <div className="text-6xl opacity-60">
-                        {getContentIcon(content.content_type)}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {contents.map((content) => (
+                    <div key={content.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                      <div className="flex flex-col">
+                        <div className="flex items-start justify-between">
+                          <h3 className="font-semibold text-gray-800 text-sm flex-1">{content.title}</h3>
+                          <button
+                            onClick={() => handleDeleteContent(content.id)}
+                            className="text-red-500 hover:text-red-700 text-sm ml-2"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                            {content.content_type}
+                          </span>
+                          {content.skill_name && (
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                              {content.skill_name}
+                            </span>
+                          )}
+                          {content.difficulty && (
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                              {content.difficulty}
+                            </span>
+                          )}
+                        </div>
+                        {content.description && (
+                          <p className="text-sm text-gray-500 mt-2">{content.description}</p>
+                        )}
+                        {content.content_url && (
+                          <a href={content.content_url} target="_blank" rel="noopener" className="text-blue-600 hover:underline text-sm mt-2 inline-block">
+                            🔗 View Content
+                          </a>
+                        )}
                       </div>
-                      
-                      {/* File type label */}
-                      <div className="absolute bottom-2 left-2 px-3 py-1 rounded-full text-xs font-medium text-white bg-black/50 backdrop-blur-sm">
-                        {getContentLabel(content.content_type)}
-                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
 
-                      {/* Difficulty Badge on LEFT side */}
-                      {content.difficulty && (
-                        <div className={`absolute top-2 left-2 px-3 py-1 rounded-full text-xs font-bold text-white shadow-lg ${getDifficultyColor(content.difficulty)}`}>
-                          {getDifficultyBadge(content.difficulty)}
+        {/* Coaching Tab */}
+        {activeTab === 'coaching' && (
+          <>
+            <button
+              onClick={() => setShowAssignStudent(!showAssignStudent)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition mb-4 ${
+                showAssignStudent 
+                  ? 'bg-red-600 hover:bg-red-700 text-white' 
+                  : 'bg-orange-600 hover:bg-orange-700 text-white'
+              }`}
+            >
+              {showAssignStudent ? '✕ Cancel' : '+ Assign for Coaching'}
+            </button>
+
+            {showAssignStudent && (
+              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mb-6">
+                <h2 className="text-lg font-bold text-gray-800 mb-4">Assign Student for Personalized Coaching</h2>
+                <form onSubmit={handleAssignStudent} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Student Email *</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="email"
+                          value={studentSearch}
+                          onChange={(e) => setStudentSearch(e.target.value)}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
+                          placeholder="student@email.com"
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSearchStudent}
+                          className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition text-sm font-medium"
+                        >
+                          Search
+                        </button>
+                      </div>
+                      {searchResult && (
+                        <div className="mt-2 p-2 bg-green-50 rounded-lg border border-green-200">
+                          <p className="text-sm text-green-700">✓ Found: {searchResult.name} ({searchResult.email})</p>
                         </div>
                       )}
-
-                      {/* Delete Button on RIGHT side */}
-                      <button
-                        onClick={(e) => handleDeleteContent(content.id, e)}
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-red-500 hover:bg-red-600 text-white rounded-full p-2 shadow-lg"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
                     </div>
-
-                    {/* Content Details */}
-                    <div className="p-4">
-                      <h3 className="font-semibold text-gray-800 text-sm line-clamp-2 hover:text-blue-600 transition">
-                        {content.title}
-                      </h3>
-                      
-                      {content.skill_name && (
-                        <p className="text-xs text-blue-600 font-medium mt-1">
-                          {content.skill_name}
-                        </p>
-                      )}
-                      
-                      <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                        <span className="capitalize">{content.content_type}</span>
-                        <span className="text-gray-300">•</span>
-                        <span>{content.difficulty || 'N/A'}</span>
-                      </div>
-
-                      <span className="text-xs text-gray-400 block mt-1">
-                        {content.created_at ? new Date(content.created_at).toLocaleDateString() : ''}
-                      </span>
-
-                      {content.description && (
-                        <p className="text-xs text-gray-500 mt-2 line-clamp-2">
-                          {content.description}
-                        </p>
-                      )}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Skill to Teach *</label>
+                      <input
+                        type="text"
+                        name="skill_name"
+                        value={assignForm.skill_name}
+                        onChange={handleAssignInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
+                        placeholder="e.g., Python, Data Science"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Current Level</label>
+                      <select
+                        name="current_level"
+                        value={assignForm.current_level}
+                        onChange={handleAssignInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
+                      >
+                        {levels.map(level => (
+                          <option key={level} value={level}>{level}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Target Level</label>
+                      <select
+                        name="target_level"
+                        value={assignForm.target_level}
+                        onChange={handleAssignInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
+                      >
+                        {levels.map(level => (
+                          <option key={level} value={level}>{level}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Total Sessions</label>
+                      <input
+                        type="number"
+                        name="total_sessions"
+                        value={assignForm.total_sessions}
+                        onChange={handleAssignInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                      <textarea
+                        name="notes"
+                        value={assignForm.notes}
+                        onChange={handleAssignInputChange}
+                        rows="2"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
+                        placeholder="Any special notes about this coaching..."
+                      />
                     </div>
                   </div>
-                ))
+                  <button
+                    type="submit"
+                    className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition text-sm font-medium"
+                    disabled={!searchResult}
+                  >
+                    Assign Student
+                  </button>
+                </form>
+              </div>
+            )}
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-bold text-gray-800">Coaching Students</h2>
+                <span className="text-sm text-gray-500">{coachingStudents.length} students</span>
+              </div>
+              {coachingStudents.length === 0 ? (
+                <p className="text-gray-500 text-center py-6 text-sm">No coaching students assigned yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {coachingStudents.map((student) => (
+                    <div key={student.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                      <div className="flex flex-wrap justify-between items-start gap-4">
+                        <div className="flex-1">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <h3 className="font-semibold text-gray-800 text-sm">{student.student_name}</h3>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              student.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                              student.status === 'active' ? 'bg-green-100 text-green-700' :
+                              student.status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {student.status}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-500">{student.student_email}</p>
+                          <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-600">
+                            <span>Skill: {student.skill_name}</span>
+                            <span>{student.current_level} → {student.target_level}</span>
+                            <span>Sessions: {student.session_count}/{student.total_sessions}</span>
+                          </div>
+                          {student.notes && (
+                            <p className="text-xs text-gray-500 mt-1">📝 {student.notes}</p>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {student.status === 'pending' && (
+                            <button
+                              onClick={() => handleUpdateCoachingStatus(student.id, 'active')}
+                              className="bg-green-500 text-white px-3 py-1 rounded text-xs hover:bg-green-600"
+                            >
+                              Start
+                            </button>
+                          )}
+                          {student.status === 'active' && (
+                            <button
+                              onClick={() => handleUpdateCoachingStatus(student.id, 'completed')}
+                              className="bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600"
+                            >
+                              Complete
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleDeleteCoaching(student.id)}
+                            className="bg-red-500 text-white px-3 py-1 rounded text-xs hover:bg-red-600"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </>
@@ -843,7 +1080,7 @@ function RegularTrainerDashboard({ user, onLogout }) {
                     value={trainerSettings.about}
                     onChange={handleSettingsChange}
                     rows="3"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                     placeholder="Tell students about yourself..."
                   />
                 </div>
@@ -854,7 +1091,7 @@ function RegularTrainerDashboard({ user, onLogout }) {
                     name="expertise"
                     value={trainerSettings.expertise}
                     onChange={handleSettingsChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                     placeholder="e.g., Python, Data Science"
                   />
                 </div>
@@ -865,8 +1102,30 @@ function RegularTrainerDashboard({ user, onLogout }) {
                     name="qualifications"
                     value={trainerSettings.qualifications}
                     onChange={handleSettingsChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                     placeholder="e.g., M.Tech, 5 years experience"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Skills Taught</label>
+                  <input
+                    type="text"
+                    name="skills_taught"
+                    value={trainerSettings.skills_taught}
+                    onChange={handleSettingsChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                    placeholder="e.g., Python, React, SQL"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Hourly Rate (₹)</label>
+                  <input
+                    type="number"
+                    name="hourly_rate"
+                    value={trainerSettings.hourly_rate}
+                    onChange={handleSettingsChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                    placeholder="0 for free"
                   />
                 </div>
               </div>
@@ -899,8 +1158,7 @@ function RegularTrainerDashboard({ user, onLogout }) {
                     name="available_time_start"
                     value={trainerSettings.available_time_start}
                     onChange={handleSettingsChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="Select time"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                   />
                 </div>
                 <div>
@@ -910,8 +1168,7 @@ function RegularTrainerDashboard({ user, onLogout }) {
                     name="available_time_end"
                     value={trainerSettings.available_time_end}
                     onChange={handleSettingsChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="Select time"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                   />
                 </div>
                 <div>
@@ -921,8 +1178,7 @@ function RegularTrainerDashboard({ user, onLogout }) {
                     name="break_start"
                     value={trainerSettings.break_start}
                     onChange={handleSettingsChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="Select time"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                   />
                 </div>
                 <div>
@@ -932,15 +1188,14 @@ function RegularTrainerDashboard({ user, onLogout }) {
                     name="break_end"
                     value={trainerSettings.break_end}
                     onChange={handleSettingsChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="Select time"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                   />
                 </div>
               </div>
 
               <button
                 type="submit"
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium"
+                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition text-sm font-medium"
               >
                 Save Settings
               </button>
