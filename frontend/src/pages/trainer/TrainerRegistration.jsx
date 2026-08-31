@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import API_BASE_URL from '../../config';
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../../components/Navbar'
 import axios from 'axios'
@@ -51,7 +52,7 @@ function TrainerRegistration() {
       setLoading(true)
       setError(null)
       
-      const response = await axios.post('http://localhost:8000/api/trainer/register', {
+      const response = await axios.post(`${API_BASE_URL}/trainer/register`, {
         name: formData.name,
         email: formData.email,
         phone: formData.phone,

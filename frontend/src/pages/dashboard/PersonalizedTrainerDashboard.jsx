@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../../components/Navbar'
+import API_BASE_URL from '../../config';
 import axios from 'axios'
+
+import { API_BASE_URL } from '../config';
 
 function PersonalizedTrainerDashboard({ user, onLogout }) {
   const navigate = useNavigate()
@@ -12,15 +15,16 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
   const [success, setSuccess] = useState(null)
   const [searchResult, setSearchResult] = useState(null)
   const [activeTab, setActiveTab] = useState('students')
+  const [filterLevel, setFilterLevel] = useState('all')
 
   const [formData, setFormData] = useState({
     student_email: '',
     skill_name: '',
-    current_level: 'Beginner',
-    target_level: 'Intermediate',
-    total_sessions: 5,
-    session_duration: 60,
-    price_per_session: 0,
+    current_level: '',
+    target_level: '',
+    total_sessions: '',
+    session_duration: '',
+    price_per_session: '',
     notes: ''
   })
 
@@ -48,7 +52,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
   })
 
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-  const levels = ['Beginner', 'Intermediate', 'Advanced', 'Expert']
+  const levels = ['Beginner', 'Intermediate', 'Advanced']
   const [skillInput, setSkillInput] = useState('')
 
   useEffect(() => {
@@ -60,7 +64,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
 
   const fetchStudents = async () => {
     try {
-      const response = await axios.get(`http://localhost:8000/api/trainer/personalized/students/${user.id}`)
+      const response = await axios.get(`${API_BASE_URL}/trainer/personalized/students/${user.id}`)
       setStudents(response.data)
     } catch (err) {
       console.error('Error fetching students:', err)
@@ -71,7 +75,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
 
   const fetchTrainerSettings = async () => {
     try {
-      const response = await axios.get(`http://localhost:8000/api/trainer/settings/${user.id}`)
+      const response = await axios.get(`${API_BASE_URL}/trainer/settings/${user.id}`)
       if (response.data) {
         setTrainerSettings({
           available_days: response.data.available_days || [],
@@ -98,6 +102,15 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
     } catch (err) {
       console.error('Error fetching trainer settings:', err)
     }
+  }
+
+  const getFilteredStudents = () => {
+    if (filterLevel === 'all') return students
+    return students.filter(s => s.current_level === filterLevel || s.target_level === filterLevel)
+  }
+
+  const getLevelCount = (level) => {
+    return students.filter(s => s.current_level === level || s.target_level === level).length
   }
 
   const handleInputChange = (e) => {
@@ -148,7 +161,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
       return
     }
     try {
-      const response = await axios.get(`http://localhost:8000/api/student/find/${formData.student_email}`)
+      const response = await axios.get(`${API_BASE_URL}/student/find/${formData.student_email}`)
       setSearchResult(response.data)
       setError(null)
     } catch (err) {
@@ -171,26 +184,26 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
     }
 
     try {
-      await axios.post('http://localhost:8000/api/trainer/personalized/assign', {
+      await axios.post(`${API_BASE_URL}/trainer/personalized/assign`, {
         ...formData,
         trainer_id: user.id,
         student_id: searchResult.id,
         student_name: searchResult.name,
         student_email: searchResult.email,
-        total_sessions: parseInt(formData.total_sessions),
+        total_sessions: parseInt(formData.total_sessions) || 0,
         price_per_session: parseFloat(formData.price_per_session) || 0,
-        session_duration: parseInt(formData.session_duration) || 60
+        session_duration: parseInt(formData.session_duration) || 0
       })
       setSuccess('Student assigned successfully!')
       setShowAddStudent(false)
       setFormData({ 
         student_email: '', 
         skill_name: '', 
-        current_level: 'Beginner', 
-        target_level: 'Intermediate', 
-        total_sessions: 5,
-        session_duration: 60,
-        price_per_session: 0,
+        current_level: '', 
+        target_level: '', 
+        total_sessions: '',
+        session_duration: '',
+        price_per_session: '',
         notes: ''
       })
       setSearchResult(null)
@@ -218,7 +231,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
         qualifications: trainerSettings.qualifications
       }
       
-      await axios.put(`http://localhost:8000/api/trainer/settings/${user.id}`, settingsData)
+      await axios.put(`${API_BASE_URL}/trainer/settings/${user.id}`, settingsData)
       setSuccess('Availability and settings saved successfully!')
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
@@ -229,7 +242,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
 
   const handleUpdateStatus = async (coachingId, status) => {
     try {
-      await axios.put(`http://localhost:8000/api/trainer/personalized/status/${coachingId}`, { status })
+      await axios.put(`${API_BASE_URL}/trainer/personalized/status/${coachingId}`, { status })
       fetchStudents()
       setSuccess('Status updated successfully!')
       setTimeout(() => setSuccess(null), 3000)
@@ -240,7 +253,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
 
   const handleIncrementSession = async (coachingId) => {
     try {
-      await axios.put(`http://localhost:8000/api/trainer/personalized/session/${coachingId}`)
+      await axios.put(`${API_BASE_URL}/trainer/personalized/session/${coachingId}`)
       fetchStudents()
       setSuccess('Session count updated!')
       setTimeout(() => setSuccess(null), 3000)
@@ -252,7 +265,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
   const handleDeleteCoaching = async (coachingId) => {
     if (window.confirm('Remove this student from coaching?')) {
       try {
-        await axios.delete(`http://localhost:8000/api/trainer/personalized/coaching/${coachingId}`)
+        await axios.delete(`${API_BASE_URL}/trainer/personalized/coaching/${coachingId}`)
         fetchStudents()
         setSuccess('Student removed successfully!')
         setTimeout(() => setSuccess(null), 3000)
@@ -290,14 +303,16 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
     )
   }
 
+  const filteredStudents = getFilteredStudents()
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50">
+    <div className="min-h-screen bg-gray-100">
       <Navbar user={user} onLogout={onLogout} />
       
       <div className="max-w-7xl mx-auto pt-24 px-6 pb-12">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">🎯 Personalized Coaching Dashboard</h1>
-          <p className="text-gray-500">Manage one-on-one coaching sessions, availability, and students</p>
+          <h1 className="text-2xl font-bold text-gray-900">Personalized Coaching Dashboard</h1>
+          <p className="text-gray-500">Manage one-on-one coaching sessions and students</p>
         </div>
 
         {success && (
@@ -339,6 +354,17 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
           </div>
         </div>
 
+        {/* Level Stats */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          {levels.map((level) => (
+            <div key={level} className="bg-white rounded-xl shadow-sm p-3 border border-gray-200 text-center">
+              <p className="text-xs text-gray-500">{level}</p>
+              <p className="text-lg font-bold text-purple-600">{getLevelCount(level)}</p>
+              <p className="text-xs text-gray-400">students</p>
+            </div>
+          ))}
+        </div>
+
         <div className="flex flex-wrap gap-2 mb-6">
           <button
             onClick={() => setActiveTab('students')}
@@ -348,7 +374,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
                 : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
             }`}
           >
-            👥 My Students
+            Students
           </button>
           <button
             onClick={() => setActiveTab('availability')}
@@ -358,7 +384,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
                 : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
             }`}
           >
-            📅 Availability & Pricing
+            Availability & Pricing
           </button>
           <button
             onClick={() => setActiveTab('settings')}
@@ -368,7 +394,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
                 : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
             }`}
           >
-            ⚙️ Profile Settings
+            Profile Settings
           </button>
         </div>
 
@@ -383,7 +409,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
                   : 'bg-purple-600 hover:bg-purple-700 text-white'
               }`}
             >
-              {showAddStudent ? '✕ Cancel' : '+ Assign New Student'}
+              {showAddStudent ? 'Cancel' : '+ Assign New Student'}
             </button>
 
             {showAddStudent && (
@@ -413,7 +439,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
                       </div>
                       {searchResult && (
                         <div className="mt-2 p-2 bg-green-50 rounded-lg border border-green-200">
-                          <p className="text-sm text-green-700">✓ {searchResult.name} ({searchResult.email})</p>
+                          <p className="text-sm text-green-700">Found: {searchResult.name} ({searchResult.email})</p>
                         </div>
                       )}
                     </div>
@@ -438,10 +464,12 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                         required
                       >
-                        {levels.map(level => (
-                          <option key={level} value={level}>{level}</option>
-                        ))}
+                        <option value="">Select Level</option>
+                        <option value="Beginner">Beginner</option>
+                        <option value="Intermediate">Intermediate</option>
+                        <option value="Advanced">Advanced</option>
                       </select>
+                      <p className="text-xs text-gray-400 mt-1">Based on student rating: 1-4 Beginner, 5-7 Intermediate, 8-10 Advanced</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Target Level *</label>
@@ -452,9 +480,10 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                         required
                       >
-                        {levels.map(level => (
-                          <option key={level} value={level}>{level}</option>
-                        ))}
+                        <option value="">Select Level</option>
+                        <option value="Beginner">Beginner</option>
+                        <option value="Intermediate">Intermediate</option>
+                        <option value="Advanced">Advanced</option>
                       </select>
                     </div>
                     <div>
@@ -466,6 +495,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
                         onChange={handleInputChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                         min="1"
+                        placeholder="Number of sessions"
                         required
                       />
                     </div>
@@ -478,6 +508,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
                         onChange={handleInputChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                         min="15"
+                        placeholder="Minutes per session"
                       />
                     </div>
                     <div>
@@ -515,19 +546,39 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
               </div>
             )}
 
+            {/* Level Filter */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
+              <div className="flex flex-wrap items-center gap-4">
+                <label className="font-medium text-gray-700 text-sm">Filter by Level:</label>
+                <select
+                  value={filterLevel}
+                  onChange={(e) => setFilterLevel(e.target.value)}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                >
+                  <option value="all">All Levels</option>
+                  {levels.map(level => (
+                    <option key={level} value={level}>{level}</option>
+                  ))}
+                </select>
+                <span className="text-sm text-gray-500">
+                  {filteredStudents.length} students found
+                </span>
+              </div>
+            </div>
+
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-bold text-gray-800">Your Coaching Students</h2>
-                <span className="text-sm text-gray-500">{students.length} students</span>
+                <span className="text-sm text-gray-500">{filteredStudents.length} students</span>
               </div>
-              {students.length === 0 ? (
+              {filteredStudents.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-gray-500 text-lg">No coaching students assigned yet.</p>
                   <p className="text-gray-400 text-sm mt-1">Click "Assign New Student" to start coaching.</p>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {students.map((student) => (
+                  {filteredStudents.map((student) => (
                     <div key={student.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
                       <div className="flex flex-wrap justify-between items-start gap-4">
                         <div className="flex-1">
@@ -541,15 +592,23 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
                             }`}>
                               {student.status.toUpperCase()}
                             </span>
+                            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                              {student.current_level} → {student.target_level}
+                            </span>
                           </div>
                           <p className="text-sm text-gray-500">{student.student_email}</p>
                           <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-600">
-                            <span>🎯 {student.skill_name}</span>
-                            <span>📊 {student.current_level} → {student.target_level}</span>
-                            <span>📝 {student.session_count}/{student.total_sessions} sessions</span>
+                            <span>Skill: {student.skill_name}</span>
+                            <span>Sessions: {student.session_count}/{student.total_sessions}</span>
                             {student.price_per_session > 0 && (
-                              <span>💰 ₹{student.price_per_session}/session</span>
+                              <span>₹{student.price_per_session}/session</span>
                             )}
+                          </div>
+                          <div className="w-full h-2 bg-gray-200 rounded-full mt-2">
+                            <div 
+                              className="h-2 bg-purple-600 rounded-full transition-all"
+                              style={{ width: `${(student.session_count / student.total_sessions) * 100}%` }}
+                            />
                           </div>
                           {student.notes && (
                             <p className="text-sm text-gray-500 mt-2">📌 {student.notes}</p>
@@ -599,7 +658,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
         {/* Availability Tab */}
         {activeTab === 'availability' && (
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">📅 Availability & Pricing</h2>
+            <h2 className="text-lg font-bold text-gray-800 mb-4">Availability & Pricing</h2>
             <form onSubmit={handleSaveAvailability} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Available Days</label>
@@ -729,7 +788,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
         {/* Settings Tab */}
         {activeTab === 'settings' && (
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">⚙️ Profile Settings</h2>
+            <h2 className="text-lg font-bold text-gray-800 mb-4">Profile Settings</h2>
             <form onSubmit={handleSaveAvailability} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">

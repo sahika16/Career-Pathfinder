@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import API_BASE_URL from '../../config';
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../../components/Navbar'
 import axios from 'axios'
@@ -29,7 +30,7 @@ function MemberDashboard({ user, onLogout }) {
 
   const fetchContents = async () => {
     try {
-      const response = await axios.get(`http://localhost:8000/api/member/contents/${user.id}`)
+      const response = await axios.get(`${API_BASE_URL}/member/contents/${user.id}`)
       setContents(response.data)
     } catch (err) {
       console.error('Error fetching contents:', err)
@@ -75,7 +76,7 @@ function MemberDashboard({ user, onLogout }) {
         uploadFormData.append('file', selectedFile)
         uploadFormData.append('trainer_id', user.id)
 
-        const uploadResponse = await axios.post('http://localhost:8000/api/member/upload', uploadFormData, {
+        const uploadResponse = await axios.post('${API_BASE_URL}/member/upload', uploadFormData, {
           headers: {
             'Content-Type': 'multipart/form-data'
           }
@@ -93,7 +94,7 @@ function MemberDashboard({ user, onLogout }) {
         trainer_id: user.id
       }
 
-      await axios.post('http://localhost:8000/api/member/content', payload)
+      await axios.post('${API_BASE_URL}/member/content', payload)
 
       setSuccess('Content added successfully!')
       setShowAddContent(false)
@@ -113,7 +114,7 @@ function MemberDashboard({ user, onLogout }) {
     e.stopPropagation()
     if (window.confirm('Delete this content?')) {
       try {
-        await axios.delete(`http://localhost:8000/api/member/content/${contentId}`)
+        await axios.delete(`${API_BASE_URL}/member/content/${contentId}`)
         fetchContents()
       } catch (err) {
         alert('Failed to delete content')

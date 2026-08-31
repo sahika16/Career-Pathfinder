@@ -1,7 +1,9 @@
 import React, { useState } from 'react'
+import API_BASE_URL from '../../config';
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../../components/Navbar'
 import axios from 'axios'
+
 
 function TrainerLoginPage() {
   const navigate = useNavigate()
@@ -22,7 +24,7 @@ function TrainerLoginPage() {
       setLoading(true)
       setError(null)
       
-      const response = await axios.post('http://localhost:8000/api/login/trainer', {
+      const response = await axios.post(`${API_BASE_URL}/login/trainer`, {
         email: email.trim(),
         password: password
       })

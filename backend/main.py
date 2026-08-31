@@ -102,8 +102,6 @@ class TrainerSettingsUpdate(BaseModel):
     available_days: Optional[List[str]] = []
     available_time_start: Optional[str] = None
     available_time_end: Optional[str] = None
-    break_start: Optional[str] = None
-    break_end: Optional[str] = None
     about: Optional[str] = ""
     expertise: Optional[str] = ""
     qualifications: Optional[str] = ""
@@ -741,8 +739,6 @@ def get_trainer_settings(trainer_id: int, db: Session = Depends(get_db)):
         "available_days": trainer.available_days or [],
         "available_time_start": trainer.available_time_start or "",
         "available_time_end": trainer.available_time_end or "",
-        "break_start": trainer.break_start or "",
-        "break_end": trainer.break_end or "",
         "about": trainer.about or "",
         "expertise": trainer.expertise or "",
         "qualifications": trainer.qualifications or "",
@@ -762,10 +758,6 @@ def update_trainer_settings(trainer_id: int, settings: TrainerSettingsUpdate, db
         trainer.available_time_start = settings.available_time_start
     if settings.available_time_end is not None:
         trainer.available_time_end = settings.available_time_end
-    if settings.break_start is not None:
-        trainer.break_start = settings.break_start
-    if settings.break_end is not None:
-        trainer.break_end = settings.break_end
     if settings.about is not None:
         trainer.about = settings.about
     if settings.expertise is not None:
@@ -785,8 +777,6 @@ def update_trainer_settings(trainer_id: int, settings: TrainerSettingsUpdate, db
         "available_days": trainer.available_days,
         "available_time_start": trainer.available_time_start,
         "available_time_end": trainer.available_time_end,
-        "break_start": trainer.break_start,
-        "break_end": trainer.break_end,
         "about": trainer.about,
         "expertise": trainer.expertise,
         "qualifications": trainer.qualifications,

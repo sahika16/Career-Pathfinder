@@ -195,8 +195,4 @@ def get_completed_skills(resume_id: int, db: Session):
     summaries = db.query(models.TestSummary).filter(
         models.TestSummary.resume_id == resume_id
     ).all()
-<<<<<<< HEAD
     return [s.skill_name.title() for s in summaries]
-=======
-    return [s.skill_name.title() for s in summaries]
->>>>>>> 737cc80f820dca9a663c89dc3c85587d3faa86c5

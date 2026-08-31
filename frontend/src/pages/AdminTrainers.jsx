@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
+import API_BASE_URL from '../config'
 
 function AdminTrainers({ user, onLogout }) {
   const navigate = useNavigate()
@@ -51,7 +52,7 @@ function AdminTrainers({ user, onLogout }) {
       setLoading(true)
       setError(null)
       
-      const response = await fetch('http://localhost:8000/api/admin/trainers')
+      const response = await fetch(`${API_BASE_URL}/admin/trainers`)
       
       if (!response.ok) {
         throw new Error('Failed to fetch trainers')
@@ -90,7 +91,7 @@ function AdminTrainers({ user, onLogout }) {
   const fetchTrainerContent = async (trainerId) => {
     try {
       setLoadingContent(true)
-      const response = await fetch(`http://localhost:8000/api/member/contents/${trainerId}`)
+      const response = await fetch(`${API_BASE_URL}/member/contents/${trainerId}`)
       if (response.ok) {
         const data = await response.json()
         setTrainerContent(data)
@@ -107,7 +108,7 @@ function AdminTrainers({ user, onLogout }) {
   const fetchTrainerSessions = async (trainerId) => {
     try {
       setLoadingContent(true)
-      const response = await fetch(`http://localhost:8000/api/trainer/sessions/${trainerId}`)
+      const response = await fetch(`${API_BASE_URL}/trainer/sessions/${trainerId}`)
       if (response.ok) {
         const data = await response.json()
         setTrainerSessions(data)
@@ -125,7 +126,7 @@ function AdminTrainers({ user, onLogout }) {
     if (!window.confirm('Approve this trainer?')) return
     
     try {
-      const response = await fetch(`http://localhost:8000/api/admin/approve-trainer/${trainerId}`, {
+      const response = await fetch(`${API_BASE_URL}/admin/approve-trainer/${trainerId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -147,7 +148,7 @@ function AdminTrainers({ user, onLogout }) {
     if (!window.confirm('Reject this trainer?')) return
     
     try {
-      const response = await fetch(`http://localhost:8000/api/admin/reject-trainer/${trainerId}`, {
+      const response = await fetch(`${API_BASE_URL}/admin/reject-trainer/${trainerId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -273,7 +274,6 @@ function AdminTrainers({ user, onLogout }) {
           </div>
         )}
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
             <p className="text-sm text-gray-500">Total</p>
@@ -297,7 +297,6 @@ function AdminTrainers({ user, onLogout }) {
           </div>
         </div>
 
-        {/* Additional Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
             <p className="text-sm text-gray-500">Regular Trainers</p>
@@ -309,7 +308,6 @@ function AdminTrainers({ user, onLogout }) {
           </div>
         </div>
 
-        {/* Search */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
           <div className="flex flex-wrap items-center gap-4">
             <label className="font-medium text-gray-700">Search:</label>
@@ -326,7 +324,6 @@ function AdminTrainers({ user, onLogout }) {
           </div>
         </div>
 
-        {/* Trainers Table */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
             {filteredTrainers.length === 0 ? (
@@ -383,7 +380,6 @@ function AdminTrainers({ user, onLogout }) {
         </div>
       </div>
 
-      {/* Trainer Details Modal */}
       {showDetails && selectedTrainer && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -400,7 +396,6 @@ function AdminTrainers({ user, onLogout }) {
             </div>
 
             <div className="p-6">
-              {/* Tabs */}
               <div className="flex flex-wrap gap-2 mb-6">
                 <button
                   onClick={() => setActiveTab('details')}
@@ -434,7 +429,6 @@ function AdminTrainers({ user, onLogout }) {
                 </button>
               </div>
 
-              {/* Profile Tab */}
               {activeTab === 'details' && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -502,7 +496,6 @@ function AdminTrainers({ user, onLogout }) {
                 </div>
               )}
 
-              {/* Content Tab */}
               {activeTab === 'content' && (
                 <div>
                   {loadingContent ? (
@@ -559,7 +552,6 @@ function AdminTrainers({ user, onLogout }) {
                 </div>
               )}
 
-              {/* Sessions Tab */}
               {activeTab === 'sessions' && (
                 <div>
                   {loadingContent ? (
@@ -623,7 +615,6 @@ function AdminTrainers({ user, onLogout }) {
                 </div>
               )}
 
-              {/* Action Buttons */}
               <div className="mt-6 pt-6 border-t border-gray-200 flex flex-wrap gap-3">
                 {!selectedTrainer.is_approved && selectedTrainer.status !== 'rejected' && (
                   <>

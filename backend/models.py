@@ -66,11 +66,9 @@ class Trainer(Base):
     status = Column(String(50), default="pending_approval")
     
     # Trainer Settings Fields
-    available_days = Column(Text, nullable=True)  # JSON array of days
+    available_days = Column(Text, nullable=True)  
     available_time_start = Column(String(10), nullable=True)
     available_time_end = Column(String(10), nullable=True)
-    break_start = Column(String(10), nullable=True)
-    break_end = Column(String(10), nullable=True)
     about = Column(Text, nullable=True)
     expertise = Column(Text, nullable=True)
     qualifications = Column(Text, nullable=True)
