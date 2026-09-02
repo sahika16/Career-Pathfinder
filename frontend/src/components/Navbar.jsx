@@ -51,6 +51,10 @@ function Navbar({ onUploadClick, user, onLogout }) {
     navigate('/login/student')
   }
 
+  const handleStudentRegister = () => {
+    navigate('/student/register')
+  }
+
   const handleLogoClick = () => {
     navigate('/')
   }
@@ -95,12 +99,20 @@ function Navbar({ onUploadClick, user, onLogout }) {
             Upload Resume
           </button>
           
-          {/* Show Profile or Login */}
+          {/* Show Profile or Login/Register */}
           {user ? (
             <ProfileDropdown user={user} onLogout={onLogout} />
           ) : (
             <>
-              {/* Login Button - Goes to Student Login */}
+              {/* Register Button */}
+              <button 
+                onClick={handleStudentRegister}
+                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2.5 rounded-full hover:shadow-lg transition font-semibold cursor-pointer"
+              >
+                Register
+              </button>
+              
+              {/* Login Button */}
               <button 
                 onClick={handleStudentLogin}
                 className="bg-gradient-to-r from-green-500 to-emerald-500 text-white px-6 py-2.5 rounded-full hover:shadow-lg transition font-semibold cursor-pointer"

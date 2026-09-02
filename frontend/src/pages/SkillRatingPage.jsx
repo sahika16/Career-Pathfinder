@@ -55,14 +55,8 @@ function SkillRatingPage({ user, onLogout }) {
         current_step: 'dashboard'
       })
       
-      // Check if user is logged in
-      if (user && user.resumeId) {
-        // User is logged in - go to dashboard
-        navigate('/student-dashboard')
-      } else {
-        // User is not logged in - go to login page
-        navigate('/login/student')
-      }
+      // Directly go to dashboard - no login check
+      navigate('/student-dashboard')
       
     } catch (err) {
       setError('Failed to save ratings. Please try again.')

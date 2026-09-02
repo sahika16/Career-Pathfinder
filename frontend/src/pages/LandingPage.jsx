@@ -74,7 +74,7 @@ function LandingPage({ user, onLogout }) {
                 Upload Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#667eea] to-[#764ba2]">Resume</span>
               </h2>
               <p className="text-gray-600 mt-4 mb-10 max-w-2xl mx-auto text-lg">
-                Upload your PDF resume and let analyze your skills
+                Upload your resume and let analyze your skill set for career 
               </p>
               <ResumeUpload onUploadSuccess={handleUploadSuccess} />
             </>

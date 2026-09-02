@@ -7,6 +7,7 @@ import StudentLogin from './pages/login/StudentLogin'
 import TrainerLoginPage from './pages/login/TrainerLoginPage'
 import AdminLoginPage from './pages/login/AdminLoginPage'
 import TrainerRegistration from './pages/trainer/TrainerRegistration'
+import StudentRegistration from './pages/student/StudentRegistration'
 import StudentDashboard from './pages/dashboard/StudentDashboard'
 import AdminDashboard from './pages/dashboard/AdminDashboard'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -104,16 +105,23 @@ function AppContent() {
 
   return (
     <Routes>
+      {/* Public Routes */}
       <Route path="/" element={<LandingPage user={user} onLogout={handleLogout} />} />
       
+      {/* Login Routes */}
       <Route path="/login/student" element={<StudentLogin onLogin={handleLogin} />} />
       <Route path="/login/trainer" element={<TrainerLoginPage />} />
       <Route path="/login/admin" element={<AdminLoginPage onLogin={handleLogin} />} />
-      <Route path="/trainer/register" element={<TrainerRegistration />} />
       
+      {/* Registration Routes */}
+      <Route path="/trainer/register" element={<TrainerRegistration />} />
+      <Route path="/student/register" element={<StudentRegistration />} />
+      
+      {/* Skill Routes */}
       <Route path="/skill-review/:resumeId" element={<SkillReviewPage user={user} onLogout={handleLogout} />} />
       <Route path="/skill-rating/:resumeId" element={<SkillRatingPage user={user} onLogout={handleLogout} />} />
       
+      {/* Assessment Routes */}
       <Route path="/assessment/:resumeId/:skillName" element={
         <ProtectedRoute user={user} allowedRoles={['student']}>
           <AssessmentPage user={user} onLogout={handleLogout} />
@@ -126,6 +134,7 @@ function AppContent() {
         </ProtectedRoute>
       } />
       
+      {/* Admin Routes */}
       <Route path="/admin-dashboard" element={
         <ProtectedRoute user={user} allowedRoles={['admin']}>
           <AdminDashboard user={user} onLogout={handleLogout} />
@@ -150,6 +159,7 @@ function AppContent() {
         </ProtectedRoute>
       } />
       
+      {/* Dashboard Routes */}
       <Route path="/member-dashboard" element={
         <ProtectedRoute user={user} allowedRoles={['member']}>
           <MemberDashboard user={user} onLogout={handleLogout} />
@@ -168,18 +178,21 @@ function AppContent() {
         </ProtectedRoute>
       } />
 
+      {/* Learning Resources */}
       <Route path="/learning-resources" element={
         <ProtectedRoute user={user} allowedRoles={['student']}>
           <LearningResourcesPage user={user} onLogout={handleLogout} />
         </ProtectedRoute>
       } />
       
+      {/* Student Dashboard */}
       <Route path="/student-dashboard" element={
         <ProtectedRoute user={user} allowedRoles={['student']}>
           <StudentDashboard user={user} onLogout={handleLogout} />
         </ProtectedRoute>
       } />
       
+      {/* Universal Dashboard */}
       <Route path="/dashboard" element={
         <ProtectedRoute user={user} allowedRoles={['student', 'trainer', 'admin', 'member']}>
           {user?.role === 'student' && <StudentDashboard user={user} onLogout={handleLogout} />}

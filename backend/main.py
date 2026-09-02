@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 import pdfplumber
 import io
 import shutil
+from sqlalchemy import func
 import os
 from datetime import datetime, timezone
 from pydantic import BaseModel
@@ -14,6 +15,24 @@ from database import engine, get_db
 from resume_parser import parse_resume
 import random
 from datetime import datetime, timedelta
+# ====== STUDENT REGISTRATION MODELS ======
+class StudentRegister(BaseModel):
+    name: str
+    email: str
+    phone: str
+    year_of_passout: Optional[str] = ""
+    degree: Optional[str] = ""
+    branch: Optional[str] = ""
+    experience: Optional[str] = ""
+    skills: Optional[str] = ""
+
+class StudentOTPRequest(BaseModel):
+    email: str
+    phone: Optional[str] = ""
+
+class StudentOTPVerify(BaseModel):
+    email: str
+    otp: str
 from assessment import (
     generate_test_for_skill, 
     evaluate_test_submission, 
@@ -510,27 +529,39 @@ def update_resume_status(resume_id: int, status_data: StatusUpdate, db: Session 
 
 @app.post("/api/login/send-otp")
 def send_login_otp(login_data: dict, db: Session = Depends(get_db)):
+    """Send OTP to student's email or phone for login"""
     email = login_data.get('email')
     phone = login_data.get('phone')
     
     if not email and not phone:
         raise HTTPException(status_code=400, detail="Email or phone is required")
     
-    is_email = email and '@' in email and '.' in email
-    
     resume = None
     contact_method = None
     
-    if is_email:
-        resume = db.query(models.Resume).filter(models.Resume.email == email).first()
+    # Check if it's an email
+    if email and '@' in email and '.' in email:
+        # Case-insensitive search for email
+        resume = db.query(models.Resume).filter(
+            func.lower(models.Resume.email) == func.lower(email.strip())
+        ).first()
         contact_method = 'email'
     else:
-        resume = find_resume_by_phone(phone, db)
+        # It's a phone number
+        phone_clean = ''.join(filter(str.isdigit, phone))
+        resume = find_resume_by_phone(phone_clean, db)
+        contact_method = 'phone'
+    
+    # If not found by email, try phone
+    if not resume and email:
+        phone_clean = ''.join(filter(str.isdigit, email))
+        resume = find_resume_by_phone(phone_clean, db)
         contact_method = 'phone'
     
     if not resume:
-        raise HTTPException(status_code=404, detail="No account found with this email/phone. Please upload resume first.")
+        raise HTTPException(status_code=404, detail="No account found with this email/phone. Please upload resume first or register.")
     
+    # Generate OTP
     otp = str(random.randint(100000, 999999))
     
     resume.otp = otp
@@ -540,16 +571,13 @@ def send_login_otp(login_data: dict, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(resume)
     
+    # Send OTP based on contact method
     sent = False
     
     if contact_method == 'email' and resume.email:
         sent, result = send_otp_email(resume.email, otp, resume.name or "Student")
-        print(f"📧 OTP sent to email: {resume.email}")
     elif contact_method == 'phone' and resume.phone:
         sent, result = send_otp_sms(resume.phone, otp, resume.name or "Student")
-        print(f"📱 OTP sent to phone: {resume.phone}")
-    else:
-        sent = False
     
     if sent:
         return {
@@ -561,7 +589,6 @@ def send_login_otp(login_data: dict, db: Session = Depends(get_db)):
             "expires_in": "5 minutes"
         }
     else:
-        print(f"⚠️ OTP sending failed. OTP for testing: {otp}")  
         return {
             "message": "OTP generated but sending failed. Check logs.",
             "otp": otp,
@@ -571,7 +598,6 @@ def send_login_otp(login_data: dict, db: Session = Depends(get_db)):
             "phone": resume.phone,
             "expires_in": "5 minutes"
         }
-
 @app.post("/api/login/verify-otp")
 def verify_login_otp(verify_data: dict, db: Session = Depends(get_db)):
     otp = verify_data.get('otp')
@@ -610,10 +636,20 @@ def verify_login_otp(verify_data: dict, db: Session = Depends(get_db)):
 
 @app.get("/api/login/check/{email_or_phone}")
 def check_user_exists(email_or_phone: str, db: Session = Depends(get_db)):
+    """Check if user exists with given email or phone"""
+    
+    resume = None
+    
+    # Check if it's an email
     if '@' in email_or_phone and '.' in email_or_phone:
-        resume = db.query(models.Resume).filter(models.Resume.email == email_or_phone).first()
+        # Case-insensitive search
+        resume = db.query(models.Resume).filter(
+            func.lower(models.Resume.email) == func.lower(email_or_phone.strip())
+        ).first()
     else:
-        resume = find_resume_by_phone(email_or_phone, db)
+        # It's a phone number
+        phone_clean = ''.join(filter(str.isdigit, email_or_phone))
+        resume = find_resume_by_phone(phone_clean, db)
     
     if not resume:
         return {"exists": False}
@@ -1774,6 +1810,193 @@ def get_personalized_trainers_for_student(student_id: int, db: Session = Depends
     
     return result
 
+# ====== STUDENT REGISTRATION ENDPOINTS ======
+
+otp_storage = {}
+
+@app.get("/api/student/check-email/{email}")
+def check_email_exists(email: str, db: Session = Depends(get_db)):
+    """Check if email already registered"""
+    existing = db.query(models.Resume).filter(models.Resume.email == email).first()
+    return {"exists": existing is not None}
+
+@app.get("/api/student/check-phone/{phone}")
+def check_phone_exists(phone: str, db: Session = Depends(get_db)):
+    """Check if phone number already registered"""
+    existing = db.query(models.Resume).filter(models.Resume.phone == phone).first()
+    return {"exists": existing is not None}
+
+@app.post("/api/student/send-otp")
+def student_send_otp(request: StudentOTPRequest, db: Session = Depends(get_db)):
+    """Send OTP for student registration"""
+    email = request.email
+    phone = request.phone
+    
+    if not email and not phone:
+        raise HTTPException(status_code=400, detail="Email or phone is required")
+    
+    # Check if email already exists
+    if email:
+        existing = db.query(models.Resume).filter(models.Resume.email == email).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already registered. Please login.")
+    
+    if phone:
+        existing = db.query(models.Resume).filter(models.Resume.phone == phone).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Phone already registered. Please login.")
+    
+    otp = str(random.randint(100000, 999999))
+    
+    # Store OTP
+    otp_storage[email or phone] = {
+        "otp": otp,
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=5)
+    }
+    
+    # Send OTP via email
+    if email:
+        sent, result = send_otp_email(email, otp, "Student")
+        if sent:
+            return {
+                "message": "OTP sent to your email",
+                "email": email,
+                "expires_in": "5 minutes"
+            }
+    
+    # If email fails, try SMS
+    if phone:
+        sent, result = send_otp_sms(phone, otp, "Student")
+        if sent:
+            return {
+                "message": "OTP sent to your phone",
+                "phone": phone,
+                "expires_in": "5 minutes"
+            }
+    
+    # If both fail, return OTP for testing
+    print(f"⚠️ OTP for testing: {otp}")
+    return {
+        "message": "OTP generated. For testing, use: " + otp,
+        "otp": otp,
+        "expires_in": "5 minutes"
+    }
+
+@app.post("/api/student/verify-otp")
+def student_verify_otp(request: StudentOTPVerify, db: Session = Depends(get_db)):
+    """Verify OTP for student registration"""
+    email = request.email
+    otp = request.otp
+    
+    if not email or not otp:
+        raise HTTPException(status_code=400, detail="Email and OTP are required")
+    
+    stored_data = otp_storage.get(email)
+    
+    if not stored_data:
+        raise HTTPException(status_code=400, detail="OTP not found. Please request a new one.")
+    
+    if stored_data["expires_at"] < datetime.now(timezone.utc):
+        del otp_storage[email]
+        raise HTTPException(status_code=400, detail="OTP expired. Please request a new one.")
+    
+    if stored_data["otp"] != otp:
+        raise HTTPException(status_code=400, detail="Invalid OTP. Please try again.")
+    
+    del otp_storage[email]
+    
+    return {
+        "verified": True,
+        "email": email,
+        "message": "OTP verified successfully"
+    }
+
+@app.post("/api/student/register")
+def student_register(register_data: StudentRegister, db: Session = Depends(get_db)):
+    """Register student without resume"""
+    
+    if not register_data.name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    
+    if not register_data.email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    
+    if not register_data.phone:
+        raise HTTPException(status_code=400, detail="Phone number is required")
+    
+    # Clean phone
+    clean_phone = ''.join(filter(str.isdigit, register_data.phone))
+    if len(clean_phone) != 10:
+        raise HTTPException(status_code=400, detail="Please enter a valid 10-digit phone number")
+    
+    # Check existing records
+    existing_phone = db.query(models.Resume).filter(
+        models.Resume.phone == register_data.phone
+    ).first()
+    if existing_phone:
+        raise HTTPException(status_code=400, detail="Phone number already registered")
+    
+    existing_email = db.query(models.Resume).filter(
+        func.lower(models.Resume.email) == func.lower(register_data.email.strip())
+    ).first()
+    if existing_email:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Create education text
+    education_text = ""
+    if register_data.degree:
+        education_text += register_data.degree
+    if register_data.branch:
+        education_text += " in " + register_data.branch
+    if register_data.year_of_passout:
+        education_text += " (" + register_data.year_of_passout + ")"
+    
+    # Create student record
+    resume = models.Resume(
+        filename="registered_without_resume",
+        file_data=b"", 
+        file_size=0,
+        extracted_text="",
+        name=register_data.name.strip(),
+        email=register_data.email.strip().lower(),
+        phone=register_data.phone.strip(),
+        year_of_passout=register_data.year_of_passout or "",
+        degree=register_data.degree or "",
+        branch=register_data.branch or "",
+        experience=register_data.experience or "",
+        registered_without_resume=True,
+        education=education_text,
+        role="student",
+        status="active",
+        current_step="review",
+        is_verified=True,
+        uploaded_at=datetime.now(timezone.utc)
+    )
+    
+    db.add(resume)
+    db.flush()
+    
+    # Add skills
+    if register_data.skills:
+        skill_list = [s.strip() for s in register_data.skills.split(',') if s.strip()]
+        for skill_name in skill_list:
+            skill = models.Skill(
+                resume_id=resume.id,
+                skill_name=skill_name,
+                is_core=True
+            )
+            db.add(skill)
+    
+    db.commit()
+    db.refresh(resume)
+    
+    return {
+        "message": "Student registered successfully",
+        "id": resume.id,
+        "name": resume.name,
+        "phone": resume.phone,
+        "email": resume.email
+    }
 @app.get("/api/health")
 def health_check():
     return {"status": "healthy"}

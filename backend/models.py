@@ -16,11 +16,19 @@ class Resume(Base):
     email = Column(String(100), nullable=True)
     phone = Column(String(20), nullable=True)
     
+    # ====== REGISTRATION FIELDS ======
+    year_of_passout = Column(String(20), nullable=True)
+    degree = Column(String(100), nullable=True)
+    branch = Column(String(100), nullable=True)
+    experience = Column(Text, nullable=True)  # ✅ Changed to match main.py
+    skills = Column(Text, nullable=True)       # ✅ Added this field
+    registered_without_resume = Column(Boolean, default=False)
+    # ==================================
+    
     role = Column(String(20), default="student")
     password = Column(String(255), nullable=True)
     is_approved = Column(Boolean, default=False)
     specialty = Column(String(100), nullable=True)
-    experience = Column(Text, nullable=True)
     education = Column(Text, nullable=True)
     
     otp = Column(String(6), nullable=True)
@@ -43,7 +51,7 @@ class Resume(Base):
     test_results = relationship("TestResult", back_populates="resume", cascade="all, delete-orphan")
     coachings = relationship("PersonalizedCoaching", back_populates="student", cascade="all, delete-orphan")
 
-# ====== Trainer Table (Separate from Resumes) ======
+# ====== Trainer Table ======
 class Trainer(Base):
     __tablename__ = "trainers"
     
@@ -55,7 +63,7 @@ class Trainer(Base):
     role = Column(String(50), default="trainer")
     category = Column(String(50), default="regular")
     specialty = Column(String(100), nullable=True)
-    experience = Column(Text, nullable=True)
+    experience = Column(Text, nullable=True)  # ✅ Changed to match main.py
     education = Column(Text, nullable=True)
     bio = Column(Text, nullable=True)
     availability = Column(Text, nullable=True)
@@ -66,9 +74,11 @@ class Trainer(Base):
     status = Column(String(50), default="pending_approval")
     
     # Trainer Settings Fields
-    available_days = Column(Text, nullable=True)  
+    available_days = Column(Text, nullable=True)
     available_time_start = Column(String(10), nullable=True)
     available_time_end = Column(String(10), nullable=True)
+    break_start = Column(String(10), nullable=True)
+    break_end = Column(String(10), nullable=True)
     about = Column(Text, nullable=True)
     expertise = Column(Text, nullable=True)
     qualifications = Column(Text, nullable=True)
@@ -168,7 +178,7 @@ class TrainerContent(Base):
     
     trainer = relationship("Trainer", back_populates="contents")
 
-# ====== Trainer Session Model (FIXED - Added missing fields) ======
+# ====== Trainer Session Model ======
 class TrainerSession(Base):
     __tablename__ = "trainer_sessions"
     
@@ -182,10 +192,10 @@ class TrainerSession(Base):
     duration_minutes = Column(Integer, default=60)
     max_students = Column(Integer, default=10)
     enrolled_count = Column(Integer, default=0)
-    price = Column(DECIMAL(10,2), default=0)  # ADDED
-    category = Column(String(100), nullable=True)  # ADDED
-    level = Column(String(50), nullable=True)  # ADDED
-    meeting_link = Column(Text, nullable=True)  # ADDED
+    price = Column(DECIMAL(10,2), default=0)
+    category = Column(String(100), nullable=True)
+    level = Column(String(50), nullable=True)
+    meeting_link = Column(Text, nullable=True)
     status = Column(String(50), default="scheduled")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

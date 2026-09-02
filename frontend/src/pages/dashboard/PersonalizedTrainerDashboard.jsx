@@ -4,8 +4,6 @@ import Navbar from '../../components/Navbar'
 import API_BASE_URL from '../../config';
 import axios from 'axios'
 
-import { API_BASE_URL } from '../config';
-
 function PersonalizedTrainerDashboard({ user, onLogout }) {
   const navigate = useNavigate()
   const [students, setStudents] = useState([])
@@ -354,7 +352,6 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
           </div>
         </div>
 
-        {/* Level Stats */}
         <div className="grid grid-cols-3 gap-4 mb-6">
           {levels.map((level) => (
             <div key={level} className="bg-white rounded-xl shadow-sm p-3 border border-gray-200 text-center">
@@ -398,7 +395,6 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
           </button>
         </div>
 
-        {/* Students Tab */}
         {activeTab === 'students' && (
           <>
             <button
@@ -546,7 +542,6 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
               </div>
             )}
 
-            {/* Level Filter */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
               <div className="flex flex-wrap items-center gap-4">
                 <label className="font-medium text-gray-700 text-sm">Filter by Level:</label>
@@ -655,7 +650,6 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
           </>
         )}
 
-        {/* Availability Tab */}
         {activeTab === 'availability' && (
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <h2 className="text-lg font-bold text-gray-800 mb-4">Availability & Pricing</h2>
@@ -785,7 +779,6 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
           </div>
         )}
 
-        {/* Settings Tab */}
         {activeTab === 'settings' && (
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <h2 className="text-lg font-bold text-gray-800 mb-4">Profile Settings</h2>
