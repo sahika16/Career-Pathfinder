@@ -3,8 +3,24 @@ import { useNavigate } from 'react-router-dom'
 
 function ProfileDropdown({ user, onLogout }) {
   const [isOpen, setIsOpen] = useState(false)
+  const [displayUser, setDisplayUser] = useState(user)
   const dropdownRef = useRef(null)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    let currentUser = user
+    if (!currentUser || !currentUser.resumeId) {
+      const storedUser = sessionStorage.getItem('careerUser')
+      if (storedUser) {
+        try {
+          currentUser = JSON.parse(storedUser)
+          setDisplayUser(currentUser)
+        } catch (e) {}
+      }
+    } else {
+      setDisplayUser(user)
+    }
+  }, [user])
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -27,8 +43,8 @@ function ProfileDropdown({ user, onLogout }) {
 
   const handleLogout = () => {
     setIsOpen(false)
-    localStorage.removeItem('careerUser')
-    localStorage.removeItem('careerLoginTime')
+    sessionStorage.removeItem('careerUser')
+    sessionStorage.removeItem('careerLoginTime')
     onLogout()
     navigate('/')
   }
@@ -43,30 +59,20 @@ function ProfileDropdown({ user, onLogout }) {
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-11 h-11 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold text-sm flex items-center justify-center hover:shadow-lg transition hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2"
-        title={user?.name || 'User'}
+        title={displayUser?.name || 'User'}
       >
-        {getInitials(user?.name)}
+        {getInitials(displayUser?.name)}
       </button>
 
       {isOpen && (
         <div className="absolute right-0 mt-3 w-72 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50">
           <div className="bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-6 text-center">
             <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm text-white font-bold text-3xl flex items-center justify-center mx-auto mb-3 border-3 border-white/40 shadow-lg">
-              {getInitials(user?.name)}
+              {getInitials(displayUser?.name)}
             </div>
-            <p className="text-white font-semibold text-lg truncate">{user?.name || 'Student'}</p>
-            <p className="text-white/80 text-sm truncate">{user?.email || 'No email'}</p>
+            <p className="text-white font-semibold text-lg truncate">{displayUser?.name || 'Student'}</p>
+            <p className="text-white/80 text-sm truncate">{displayUser?.email || 'No email'}</p>
           </div>
-
-          {/* RESUME ID  - COMMENTED */}
-          {/*
-          <div className="px-6 py-3 bg-gray-50 border-b border-gray-100 text-center">
-            <p className="text-sm text-gray-500">
-              <span className="font-medium text-gray-700">Resume ID:</span>{' '}
-              <span className="font-semibold text-blue-600">#{user?.resumeId || 'N/A'}</span>
-            </p>
-          </div>
-          */}
 
           <button
             onClick={handleDashboard}

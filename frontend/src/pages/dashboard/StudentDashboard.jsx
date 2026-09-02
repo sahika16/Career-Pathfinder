@@ -8,23 +8,38 @@ function StudentDashboard({ user, onLogout }) {
   const [progress, setProgress] = useState(null)
   const [assessmentSkills, setAssessmentSkills] = useState([])
   const [loading, setLoading] = useState(true)
+  const [userName, setUserName] = useState('Student')
+  const [userEmail, setUserEmail] = useState('')
 
   useEffect(() => {
-    if (user?.resumeId) {
-      fetchAllData()
+    const storedUser = sessionStorage.getItem('careerUser')
+    if (storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser)
+        if (parsedUser?.name) setUserName(parsedUser.name)
+        if (parsedUser?.email) setUserEmail(parsedUser.email)
+        if (parsedUser?.resumeId) {
+          fetchAllData(parsedUser)
+        } else {
+          setLoading(false)
+        }
+      } catch (e) {}
+    } else {
+      setLoading(false)
     }
-  }, [user])
+  }, [])
 
-  const fetchAllData = async () => {
+  const fetchAllData = async (currentUser) => {
     try {
       setLoading(true)
-      
-      const progressData = await getUserProgress(user.resumeId)
+      if (!currentUser?.resumeId) {
+        setLoading(false)
+        return
+      }
+      const progressData = await getUserProgress(currentUser.resumeId)
       setProgress(progressData)
-      
-      const skills = await getAssessmentSkills(user.resumeId)
+      const skills = await getAssessmentSkills(currentUser.resumeId)
       setAssessmentSkills(skills || [])
-      
     } catch (error) {
       console.error('Error fetching data:', error)
     } finally {
@@ -33,30 +48,55 @@ function StudentDashboard({ user, onLogout }) {
   }
 
   const handleContinue = () => {
-    if (!progress || !user) return
-    
+    const storedUser = sessionStorage.getItem('careerUser')
+    if (!storedUser) return
+    let currentUser = null
+    try {
+      currentUser = JSON.parse(storedUser)
+    } catch (e) {
+      return
+    }
+    if (!progress || !currentUser) return
     if (progress.skills_rated && progress.total_skills > 0) {
       return
     }
-    
     if (progress.has_skills && progress.total_skills > 0) {
-      navigate(`/skill-rating/${user.resumeId}`)
+      navigate(`/skill-rating/${currentUser.resumeId}`)
       return
     }
-    
-    navigate(`/skill-review/${user.resumeId}`)
+    navigate(`/skill-review/${currentUser.resumeId}`)
   }
 
   const handleStartTest = (skillName) => {
+    const storedUser = sessionStorage.getItem('careerUser')
+    if (!storedUser) {
+      alert('Please login again')
+      return
+    }
+    let currentUser = null
+    try {
+      currentUser = JSON.parse(storedUser)
+    } catch (e) {
+      alert('Please login again')
+      return
+    }
     if (!skillName) {
       alert('No skill selected.')
       return
     }
-    navigate(`/assessment/${user.resumeId}/${skillName}`)
+    navigate(`/assessment/${currentUser.resumeId}/${skillName}`)
   }
 
   const handleViewResults = (skillName) => {
-    navigate(`/results/${user.resumeId}/${skillName}`)
+    const storedUser = sessionStorage.getItem('careerUser')
+    if (!storedUser) return
+    let currentUser = null
+    try {
+      currentUser = JSON.parse(storedUser)
+    } catch (e) {
+      return
+    }
+    navigate(`/results/${currentUser.resumeId}/${skillName}`)
   }
 
   const handleStartNew = () => {
@@ -90,24 +130,20 @@ function StudentDashboard({ user, onLogout }) {
   const currentStepIndex = getCurrentStepIndex()
   const totalSteps = 4
   const progressPercentage = (currentStepIndex / totalSteps) * 100
-
   const isAssessmentAvailable = progress?.skills_rated && assessmentSkills.length > 0
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <Navbar user={user} onLogout={onLogout} />
-      
       <div className="max-w-6xl mx-auto pt-28 pb-12 px-6">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-extrabold text-gray-900">
-            Welcome, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">{user?.name || 'Student'}</span>
+            Welcome, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">{userName}</span>
           </h1>
-          <p className="text-gray-600 mt-2">Continue your career journey</p>
+          <p className="text-gray-500 text-sm">Continue your career journey</p>
         </div>
-
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 mb-8">
           <h2 className="text-xl font-bold text-gray-800 mb-6">Your Progress</h2>
-          
           <div className="mb-4">
             <div className="flex justify-between text-sm text-gray-500 mb-1">
               <span>Resume Upload</span>

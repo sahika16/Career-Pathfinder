@@ -20,7 +20,21 @@ function LandingPage({ user, onLogout }) {
   }
 
   const handleUploadSuccess = (data) => {
-    console.log('Upload successful:', data)
+    const userData = {
+      id: data.id,
+      resumeId: data.id,
+      name: data.name || 'Student',
+      email: data.email || 'student@example.com',
+      phone: data.phone || '',
+      role: 'student',
+      skills: data.skills || []
+    }
+    
+    sessionStorage.setItem('careerUser', JSON.stringify(userData))
+    sessionStorage.setItem('careerLoginTime', Date.now().toString())
+    
+    alert('User saved: ' + userData.name)
+    
     navigate(`/skill-review/${data.id}`)
   }
 
@@ -74,7 +88,7 @@ function LandingPage({ user, onLogout }) {
                 Upload Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#667eea] to-[#764ba2]">Resume</span>
               </h2>
               <p className="text-gray-600 mt-4 mb-10 max-w-2xl mx-auto text-lg">
-                Upload your resume and let analyze your skill set for career 
+                Upload your resume and let analyze your skill set 
               </p>
               <ResumeUpload onUploadSuccess={handleUploadSuccess} />
             </>

@@ -7,15 +7,12 @@ function Footer() {
         <div className="grid md:grid-cols-4 gap-12">
           <div>
             <div className="flex items-center space-x-2 mb-4">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg">
-                AI
-              </div>
               <span className="text-2xl font-extrabold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                CareerAI
+                CareerPath
               </span>
             </div>
             <p className="text-gray-400 text-sm leading-relaxed">
-              Helping students discover their perfect career path with AI-powered guidance
+              Helping students discover their perfect career path with proper guidance
             </p>
           </div>
           <div>

@@ -259,8 +259,9 @@ async def upload_resume(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+    allowed_extensions = ['.pdf', '.docx', '.doc']
+    if not any(file.filename.lower().endswith(ext) for ext in allowed_extensions):
+        raise HTTPException(status_code=400, detail="Only PDF, DOC, and DOCX files are allowed")
     
     file_content = await file.read()
     file_size = len(file_content)
@@ -268,8 +269,16 @@ async def upload_resume(
         raise HTTPException(status_code=400, detail="File size exceeds 5MB limit")
     
     try:
-        extracted_text = extract_pdf_text(file_content)
-        parsed_data = parse_resume(extracted_text)
+        extracted_text = ""
+        parsed_data = {}
+        
+        if file.filename.lower().endswith('.pdf'):
+            extracted_text = extract_pdf_text(file_content)
+            parsed_data = parse_resume(extracted_text)
+        elif file.filename.lower().endswith('.docx') or file.filename.lower().endswith('.doc'):
+            from resume_parser import extract_text_from_docx
+            extracted_text = extract_text_from_docx(file_content)
+            parsed_data = parse_resume(extracted_text, file_content, file.filename)
         
         phone = parsed_data.get('phone')
         if phone:
@@ -325,7 +334,7 @@ async def upload_resume(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
-
+    
 @app.get("/api/resumes")
 def get_all_resumes(db: Session = Depends(get_db)):
     resumes = db.query(models.Resume).order_by(models.Resume.uploaded_at.desc()).all()

@@ -44,22 +44,47 @@ function SkillRatingPage({ user, onLogout }) {
   const handleSaveRatings = async () => {
     try {
       setSaving(true)
+      setError(null)
+
       const ratings = skills.map(s => ({
         id: s.id,
         rating: s.rating
       }))
       await updateAllRatings(resumeId, ratings)
-      
+
       await updateResumeStatus(resumeId, {
         skills_rated: true,
         current_step: 'dashboard'
       })
-      
-      // Directly go to dashboard - no login check
-      navigate('/student-dashboard')
-      
+
+      let currentUser = null
+      const storedUser = sessionStorage.getItem('careerUser')
+      if (storedUser) {
+        try {
+          currentUser = JSON.parse(storedUser)
+        } catch (e) {}
+      }
+
+      const userData = {
+        id: parseInt(resumeId),
+        resumeId: parseInt(resumeId),
+        name: currentUser?.name || user?.name || 'Student',
+        email: currentUser?.email || user?.email || 'student@example.com',
+        phone: currentUser?.phone || '',
+        role: 'student',
+        skills_rated: true,
+        has_skills: skills.length > 0,
+        current_step: 'dashboard'
+      }
+
+      sessionStorage.setItem('careerUser', JSON.stringify(userData))
+      sessionStorage.setItem('careerLoginTime', Date.now().toString())
+
+      navigate('/student-dashboard', { replace: true })
+
     } catch (err) {
-      setError('Failed to save ratings. Please try again.')
+      console.error('Save ratings error:', err)
+      setError(err.response?.data?.detail || 'Failed to save ratings. Please try again.')
       setSaving(false)
     }
   }

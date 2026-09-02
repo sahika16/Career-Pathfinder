@@ -93,7 +93,6 @@ function AssessmentPage({ user, onLogout }) {
   }
 
   const handleAutoSubmit = async () => {
-    alert('Time is up! Your test will be submitted automatically.')
     await submitTestHandler()
   }
 
@@ -107,21 +106,15 @@ function AssessmentPage({ user, onLogout }) {
       }
       const results = await submitTest(submissionData)
       
-      //console.log('📊 Full results from API:', results)
-      
       if (results.already_taken) {
-        alert('You have already completed this test!')
         navigate('/student-dashboard')
         return
       }
       
       if (!results || !results.details) {
-        alert('No results data received. Please try again.')
         setSubmitting(false)
         return
       }
-      
-      //alert(`Test completed! Score: ${results.score_percentage.toFixed(1)}% - ${results.result_status}`)
       
       navigate(`/results/${resumeId}/${skillName}`, { 
         state: { 
@@ -305,7 +298,7 @@ function AssessmentPage({ user, onLogout }) {
           
           {currentQuestionIndex === questions.length - 1 ? (
             <button
-              onClick={handleSubmitTest}
+              onClick={submitTestHandler}
               disabled={submitting || !isTestComplete}
               className={`bg-gradient-to-r from-green-500 to-emerald-500 text-white px-8 py-2 rounded-lg hover:shadow-lg transition font-semibold ${
                 !isTestComplete ? 'opacity-50 cursor-not-allowed' : ''
@@ -334,7 +327,7 @@ function AssessmentPage({ user, onLogout }) {
             <button
               key={q.id}
               onClick={() => setCurrentQuestionIndex(index)}
-              className={`w-8 h-8 rounded-full text-sm font-medium transition ${
+              className={`w-8 h-8 rounded-full text-sm font-medium transition ${ 
                 index === currentQuestionIndex
                   ? 'bg-blue-600 text-white'
                   : answers[q.id] !== undefined

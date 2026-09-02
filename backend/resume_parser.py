@@ -1,6 +1,8 @@
 import re
+import os
+import tempfile
+from docx import Document
 
-# ====== SKILLS LIST ======
 SKILLS_LIST = [
     'python', 'java', 'javascript', 'typescript', 'c++', 'c#', 'ruby',
     'react', 'angular', 'vue', 'django', 'flask', 'spring', 'node', 'express',
@@ -18,6 +20,19 @@ UNWANTED = [
     'postman', 'swagger', 'jira', 'confluence', 'slack', 'teams', 'outlook',
     'word', 'powerpoint', 'excel'
 ]
+
+def extract_text_from_docx(file_content):
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as tmp:
+            tmp.write(file_content)
+            tmp_path = tmp.name
+        doc = Document(tmp_path)
+        text = '\n'.join([para.text for para in doc.paragraphs])
+        os.unlink(tmp_path)
+        return text
+    except Exception as e:
+        print(f"Error extracting DOCX text: {e}")
+        return ""
 
 def extract_name(text):
     lines = text.split('\n')
@@ -57,10 +72,7 @@ def extract_phone(text):
     return None
 
 def extract_skills_from_section(text):
-    """Extract skills from SKILLS section"""
     found_skills = set()
-    
-    # Get SKILLS section
     skills_text = ""
     lines = text.split('\n')
     in_skills = False
@@ -82,19 +94,14 @@ def extract_skills_from_section(text):
         if match:
             skills_text = match.group(1)
     
-   # print(f"📝 Skills text found: {skills_text[:200]}...")
-    
     if skills_text:
         skills_text_lower = skills_text.lower()
         
-        # Method 1: Direct skill matching
         for skill in SKILLS_LIST:
             if skill in skills_text_lower:
                 if skill not in UNWANTED:
                     found_skills.add(skill)
-                   # print(f"✅ Found skill: {skill}")
         
-        # Method 2: Extract from colon-separated lists
         colon_pattern = r'([A-Za-z\s]+):\s*([^,\n]+(?:,\s*[^,\n]+)*)'
         matches = re.findall(colon_pattern, skills_text, re.IGNORECASE)
         for match in matches:
@@ -104,9 +111,7 @@ def extract_skills_from_section(text):
                 item = item.strip().lower()
                 if item in SKILLS_LIST and item not in UNWANTED:
                     found_skills.add(item)
-                   # print(f"✅ Found skill from colon list: {item}")
         
-        # Method 3: Extract from comma-separated lists
         for line in skills_text.split('\n'):
             line = line.strip()
             if ':' in line:
@@ -116,14 +121,14 @@ def extract_skills_from_section(text):
                 item = item.strip().lower()
                 if item in SKILLS_LIST and item not in UNWANTED:
                     found_skills.add(item)
-                    #print(f"✅ Found skill from comma list: {item}")
     
     return list(found_skills)
 
-def parse_resume(text):
-    """Main function to parse resume"""
-    all_skills = extract_skills_from_section(text)
+def parse_resume(text, file_content=None, filename=None):
+    if filename and filename.lower().endswith('.docx'):
+        text = extract_text_from_docx(file_content) if file_content else text
     
+    all_skills = extract_skills_from_section(text)
     
     return {
         'name': extract_name(text),
