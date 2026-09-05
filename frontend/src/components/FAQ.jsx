@@ -9,20 +9,28 @@ function FAQ() {
 
   const faqs = [
     {
-      question: "Is CareerPath free to download?",
-      answer: "Yes! CareerPath is completely free for students. You can upload your resume, get AI analysis, career matching, and learning recommendations at no cost."
+      question: "Is CareerPath free?",
+      answer: "Yes! CareerPath is free but some aspects may charge for students as courses enrollment or conversation with trainer."
+    },
+    {
+      question: "What is working?",
+      answer: "Resume upload and AI analysis, Skill extraction and review, Skill rating with adaptive tests, Career matching with match scores, Learning Resources access, Course recommendations, Trainer finding (Member, Regular, Personalized), Mock Interview practice, Expert Path for advanced students, Learning Roadmap generation"
     },
     {
       question: "Can I upload multiple resumes?",
       answer: "Yes! You can upload and manage multiple resumes. Each resume will be analyzed separately and you can track progress for different career paths."
     },
     {
-      question: "Are the career recommendations accurate?",
-      answer: "Our AI uses advanced matching algorithms to provide 85%+ accurate career recommendations based on your skills, experience, and interests."
+      question: "What is the difference between upload and register?",
+      answer: "Upload: You upload your resume and AI extracts your skills automatically. Register: You manually enter your details and skills without uploading a resume. Both lead to the same career guidance journey."
     },
     {
-      question: "Can I download my analysis as a PDF?",
-      answer: "Yes! You can download your complete skill analysis, career matches, and learning recommendations as a PDF report."
+      question: "Can I access Learning Resources without a resume?",
+      answer: "Yes! Just click the 'Learning Resources' button on the homepage. No resume needed."
+    },
+    {
+      question: "How does course recommendation work?",
+      answer: "After tests, we identify your skill gaps and find best courses from platforms based on your test results and learning goals."
     },
     {
       question: "Is my data safe and secure?",

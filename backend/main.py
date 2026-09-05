@@ -9,13 +9,13 @@ from sqlalchemy import func
 import os
 from datetime import datetime, timezone
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Union 
 import models
 from database import engine, get_db
 from resume_parser import parse_resume
 import random
-from datetime import datetime, timedelta
-# ====== STUDENT REGISTRATION MODELS ======
+import string
+from datetime import datetime, timedelta 
 class StudentRegister(BaseModel):
     name: str
     email: str
@@ -118,13 +118,13 @@ class AdminLogin(BaseModel):
     password: str
 
 class TrainerSettingsUpdate(BaseModel):
-    available_days: Optional[List[str]] = []
+    available_days: Optional[Union[List[str], str]] = []
     available_time_start: Optional[str] = None
     available_time_end: Optional[str] = None
     about: Optional[str] = ""
     expertise: Optional[str] = ""
     qualifications: Optional[str] = ""
-    hourly_rate: Optional[str] = ""
+    hourly_rate: Optional[str] = None
     skills_taught: Optional[str] = ""
 
 def extract_pdf_text(file_content: bytes) -> str:
@@ -779,9 +779,21 @@ def get_trainer_settings(trainer_id: int, db: Session = Depends(get_db)):
     trainer = db.query(models.Trainer).filter(models.Trainer.id == trainer_id).first()
     if not trainer:
         raise HTTPException(status_code=404, detail="Trainer not found")
+
+    available_days = trainer.available_days
+    if isinstance(available_days, str):
+        try:
+            import json
+            available_days = json.loads(available_days)
+        except:
+            available_days = []
+    elif available_days is None:
+        available_days = []
+    elif not isinstance(available_days, list):
+        available_days = []
     
     return {
-        "available_days": trainer.available_days or [],
+        "available_days": available_days,
         "available_time_start": trainer.available_time_start or "",
         "available_time_end": trainer.available_time_end or "",
         "about": trainer.about or "",
@@ -792,34 +804,60 @@ def get_trainer_settings(trainer_id: int, db: Session = Depends(get_db)):
     }
 
 @app.put("/api/trainer/settings/{trainer_id}")
-def update_trainer_settings(trainer_id: int, settings: TrainerSettingsUpdate, db: Session = Depends(get_db)):
+def update_trainer_settings(trainer_id: int, settings: dict, db: Session = Depends(get_db)):
     trainer = db.query(models.Trainer).filter(models.Trainer.id == trainer_id).first()
     if not trainer:
         raise HTTPException(status_code=404, detail="Trainer not found")
     
-    if settings.available_days is not None:
-        trainer.available_days = settings.available_days
-    if settings.available_time_start is not None:
-        trainer.available_time_start = settings.available_time_start
-    if settings.available_time_end is not None:
-        trainer.available_time_end = settings.available_time_end
-    if settings.about is not None:
-        trainer.about = settings.about
-    if settings.expertise is not None:
-        trainer.expertise = settings.expertise
-    if settings.qualifications is not None:
-        trainer.qualifications = settings.qualifications
-    if settings.hourly_rate is not None:
-        trainer.hourly_rate = settings.hourly_rate
-    if settings.skills_taught is not None:
-        trainer.skills_taught = settings.skills_taught
+    if 'available_days' in settings:
+        import json
+        if isinstance(settings['available_days'], list):
+            trainer.available_days = json.dumps(settings['available_days'])
+        else:
+            trainer.available_days = settings['available_days']
+    
+    if 'available_time_start' in settings:
+        trainer.available_time_start = settings['available_time_start']
+    if 'available_time_end' in settings:
+        trainer.available_time_end = settings['available_time_end']
+    if 'about' in settings:
+        trainer.about = settings['about']
+    if 'expertise' in settings:
+        trainer.expertise = settings['expertise']
+    if 'qualifications' in settings:
+        trainer.qualifications = settings['qualifications']
+    
+    if 'hourly_rate' in settings:
+        hourly_rate = settings['hourly_rate']
+        if hourly_rate == "" or hourly_rate is None:
+            trainer.hourly_rate = None
+        else:
+            try:
+                trainer.hourly_rate = float(hourly_rate)
+            except ValueError:
+                trainer.hourly_rate = None
+    
+    if 'skills_taught' in settings:
+        trainer.skills_taught = settings['skills_taught'] if settings['skills_taught'] else None
     
     db.commit()
     db.refresh(trainer)
     
+    available_days = trainer.available_days
+    if isinstance(available_days, str):
+        try:
+            import json
+            available_days = json.loads(available_days)
+        except:
+            available_days = []
+    elif available_days is None:
+        available_days = []
+    elif not isinstance(available_days, list):
+        available_days = []
+    
     return {
         "message": "Settings updated successfully",
-        "available_days": trainer.available_days,
+        "available_days": available_days,
         "available_time_start": trainer.available_time_start,
         "available_time_end": trainer.available_time_end,
         "about": trainer.about,
@@ -828,7 +866,6 @@ def update_trainer_settings(trainer_id: int, settings: TrainerSettingsUpdate, db
         "hourly_rate": trainer.hourly_rate,
         "skills_taught": trainer.skills_taught
     }
-
 @app.post("/api/trainer/video")
 def add_trainer_video(video_data: dict, db: Session = Depends(get_db)):
     trainer_id = video_data.get('trainer_id')
@@ -1264,8 +1301,21 @@ def get_all_students(db: Session = Depends(get_db)):
 def get_all_trainers(db: Session = Depends(get_db)):
     trainers = db.query(models.Trainer).order_by(models.Trainer.created_at.desc()).all()
     
-    return [
-        {
+    result = []
+    for t in trainers:
+        available_days = t.available_days
+        if isinstance(available_days, str):
+            try:
+                import json
+                available_days = json.loads(available_days)
+            except:
+                available_days = []
+        elif available_days is None:
+            available_days = []
+        elif not isinstance(available_days, list):
+            available_days = []
+        
+        result.append({
             "id": t.id,
             "name": t.name,
             "email": t.email,
@@ -1277,10 +1327,19 @@ def get_all_trainers(db: Session = Depends(get_db)):
             "specialty": t.specialty,
             "is_approved": t.is_approved,
             "status": t.status,
-            "created_at": t.created_at
-        }
-        for t in trainers
-    ]
+            "created_at": t.created_at,
+            "about": t.about or "",
+            "expertise": t.expertise or "",
+            "qualifications": t.qualifications or "",
+            "available_days": available_days,
+            "available_time_start": t.available_time_start or "",
+            "available_time_end": t.available_time_end or "",
+            "hourly_rate": t.hourly_rate or 0,
+            "skills_taught": t.skills_taught or "",
+            "rating": t.rating or 0
+        })
+    
+    return result
 
 @app.get("/api/admin/pending-trainers")
 def get_pending_trainers(db: Session = Depends(get_db)):
@@ -2006,6 +2065,505 @@ def student_register(register_data: StudentRegister, db: Session = Depends(get_d
         "phone": resume.phone,
         "email": resume.email
     }
+
+def generate_referral_code(name):
+    """Generate a unique referral code"""
+    name_part = name[:3].upper() if name else "STU"
+    digits = ''.join(random.choices(string.digits, k=4))
+    return f"{name_part}{digits}"
+
+@app.post("/api/generate-referral")
+def generate_referral_code_for_user(gen_data: dict, db: Session = Depends(get_db)):
+    """Generate referral code for a student (works with email or resume_id)"""
+    identifier = gen_data.get('identifier')
+    name = gen_data.get('name', 'Student')
+    email = gen_data.get('email', '')
+    
+    if not identifier:
+        raise HTTPException(status_code=400, detail="Identifier required")
+    
+    # Find user by resume_id, email, or phone
+    resume = db.query(models.Resume).filter(
+        (models.Resume.id == identifier) |
+        (models.Resume.email == identifier) |
+        (models.Resume.phone == identifier)
+    ).first()
+    
+    if not resume:
+        # Create a temporary user record if doesn't exist
+        resume = models.Resume(
+            name=name,
+            email=email,
+            status="pending"
+        )
+        db.add(resume)
+        db.commit()
+        db.refresh(resume)
+    
+    if resume.referral_code:
+        return {
+            "referral_code": resume.referral_code,
+            "message": "Referral code already exists"
+        }
+    
+    # Generate unique referral code
+    code = generate_referral_code(name)
+    
+    # Make sure it's unique
+    while db.query(models.Resume).filter(models.Resume.referral_code == code).first():
+        code = generate_referral_code(name)
+    
+    resume.referral_code = code
+    db.commit()
+    db.refresh(resume)
+    
+    return {
+        "referral_code": code,
+        "message": "Referral code generated successfully"
+    }
+
+@app.get("/api/referral/{identifier}")
+def get_referral_info(identifier: str, db: Session = Depends(get_db)):
+    """Get referral code and stats for a student"""
+    # Find by resume_id, email, or phone
+    resume = db.query(models.Resume).filter(
+        (models.Resume.id == identifier) |
+        (models.Resume.email == identifier) |
+        (models.Resume.phone == identifier) |
+        (models.Resume.referral_code == identifier)
+    ).first()
+    
+    if not resume:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    # Count referred users
+    referred_count = db.query(models.Resume).filter(
+        models.Resume.referred_by == resume.referral_code
+    ).count()
+    
+    return {
+        "referral_code": resume.referral_code,
+        "referred_count": referred_count,
+        "referral_earnings": resume.referral_earnings or 0,
+        "referral_link": f"https://careerpathfinder.com/signup?ref={resume.referral_code}"
+    }
+
+@app.post("/api/referral/apply")
+def apply_referral(apply_data: dict, db: Session = Depends(get_db)):
+    """Apply referral code when a new student signs up"""
+    referral_code = apply_data.get('referral_code')
+    student_id = apply_data.get('student_id')
+    student_email = apply_data.get('student_email', '')
+    
+    if not referral_code:
+        raise HTTPException(status_code=400, detail="Referral code required")
+    
+    # Check if referral code exists
+    referrer = db.query(models.Resume).filter(
+        models.Resume.referral_code == referral_code
+    ).first()
+    
+    if not referrer:
+        raise HTTPException(status_code=404, detail="Invalid referral code")
+    
+    # Find student by various identifiers
+    student = None
+    if student_id:
+        student = db.query(models.Resume).filter(
+            (models.Resume.id == student_id) |
+            (models.Resume.email == student_id) |
+            (models.Resume.phone == student_id)
+        ).first()
+    
+    if not student and student_email:
+        student = db.query(models.Resume).filter(
+            models.Resume.email == student_email
+        ).first()
+    
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    # Don't allow self-referral
+    if referrer.id == student.id:
+        raise HTTPException(status_code=400, detail="You cannot refer yourself")
+    
+    # Check if student already has a referral
+    if student.referred_by:
+        raise HTTPException(status_code=400, detail="Referral already applied")
+    
+    # Apply referral
+    student.referred_by = referral_code
+    referrer.referral_count = (referrer.referral_count or 0) + 1
+    referrer.referral_earnings = (referrer.referral_earnings or 0) + 1
+    
+    db.commit()
+    
+    return {
+        "message": "Referral applied successfully",
+        "referrer": referrer.name,
+        "referral_code": referral_code
+    }
+
+# ====== ENROLLMENT AND ATTENDANCE ENDPOINTS ======
+
+class EnrollmentRequest(BaseModel):
+    student_id: int
+    session_id: int
+
+class AttendanceRequest(BaseModel):
+    student_id: int
+    session_id: int
+    status: str  # present, absent, late
+    notes: Optional[str] = ""
+
+class ProgressUpdate(BaseModel):
+    progress: int
+
+@app.post("/api/enroll")
+def enroll_student(enrollment_data: EnrollmentRequest, db: Session = Depends(get_db)):
+    """Enroll a student in a course session"""
+    
+    # Check if student exists
+    student = db.query(models.Resume).filter(models.Resume.id == enrollment_data.student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    # Check if session exists
+    session = db.query(models.TrainerSession).filter(models.TrainerSession.id == enrollment_data.session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    # Check if already enrolled
+    existing = db.query(models.Enrollment).filter(
+        models.Enrollment.student_id == enrollment_data.student_id,
+        models.Enrollment.session_id == enrollment_data.session_id,
+        models.Enrollment.status.in_(['enrolled', 'completed'])
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="Student already enrolled in this course")
+    
+    # Check capacity
+    current_enrolled = db.query(models.Enrollment).filter(
+        models.Enrollment.session_id == enrollment_data.session_id,
+        models.Enrollment.status == 'enrolled'
+    ).count()
+    
+    if current_enrolled >= session.max_students:
+        # Add to waitlist
+        import json
+        waitlist = json.loads(session.waitlist) if session.waitlist else []
+        if enrollment_data.student_id not in waitlist:
+            waitlist.append(enrollment_data.student_id)
+            session.waitlist = json.dumps(waitlist)
+            db.commit()
+        raise HTTPException(status_code=400, detail="Course is full. Added to waitlist.")
+    
+    # Create enrollment
+    enrollment = models.Enrollment(
+        student_id=enrollment_data.student_id,
+        session_id=enrollment_data.session_id,
+        status="enrolled",
+        progress=0
+    )
+    
+    db.add(enrollment)
+    session.enrolled_count = current_enrolled + 1
+    db.commit()
+    db.refresh(enrollment)
+    
+    return {
+        "message": "Student enrolled successfully",
+        "enrollment_id": enrollment.id,
+        "student_id": enrollment.student_id,
+        "session_id": enrollment.session_id,
+        "status": enrollment.status
+    }
+
+@app.get("/api/enrollments/{student_id}")
+def get_student_enrollments(student_id: int, db: Session = Depends(get_db)):
+    """Get all enrollments for a student"""
+    
+    student = db.query(models.Resume).filter(models.Resume.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    enrollments = db.query(models.Enrollment).filter(
+        models.Enrollment.student_id == student_id
+    ).all()
+    
+    result = []
+    for enrollment in enrollments:
+        session = db.query(models.TrainerSession).filter(
+            models.TrainerSession.id == enrollment.session_id
+        ).first()
+        
+        if session:
+            trainer = db.query(models.Trainer).filter(
+                models.Trainer.id == session.trainer_id
+            ).first()
+            
+            # Get attendance count
+            attendance_count = db.query(models.Attendance).filter(
+                models.Attendance.student_id == student_id,
+                models.Attendance.session_id == session.id,
+                models.Attendance.status == 'present'
+            ).count()
+            
+            total_attendance = db.query(models.Attendance).filter(
+                models.Attendance.student_id == student_id,
+                models.Attendance.session_id == session.id
+            ).count()
+            
+            attendance_percentage = (attendance_count / total_attendance * 100) if total_attendance > 0 else 0
+            
+            result.append({
+                "enrollment_id": enrollment.id,
+                "session_id": session.id,
+                "session_title": session.title,
+                "trainer_name": trainer.name if trainer else "Unknown",
+                "trainer_id": session.trainer_id,
+                "status": enrollment.status,
+                "progress": enrollment.progress,
+                "enrolled_at": enrollment.enrolled_at,
+                "attendance_percentage": round(attendance_percentage, 2),
+                "present_days": attendance_count,
+                "total_days": total_attendance
+            })
+    
+    return result
+
+@app.put("/api/enrollment/{enrollment_id}/progress")
+def update_progress(enrollment_id: int, progress_data: ProgressUpdate, db: Session = Depends(get_db)):
+    """Update student's progress in a course"""
+    
+    enrollment = db.query(models.Enrollment).filter(
+        models.Enrollment.id == enrollment_id
+    ).first()
+    
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    
+    enrollment.progress = progress_data.progress
+    
+    if progress_data.progress >= 100:
+        enrollment.status = "completed"
+    
+    db.commit()
+    db.refresh(enrollment)
+    
+    return {
+        "message": "Progress updated",
+        "enrollment_id": enrollment.id,
+        "progress": enrollment.progress,
+        "status": enrollment.status
+    }
+
+@app.get("/api/enrollment/session/{session_id}/students")
+def get_session_students(session_id: int, db: Session = Depends(get_db)):
+    """Get all students enrolled in a session (for trainers)"""
+    
+    session = db.query(models.TrainerSession).filter(
+        models.TrainerSession.id == session_id
+    ).first()
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    enrollments = db.query(models.Enrollment).filter(
+        models.Enrollment.session_id == session_id,
+        models.Enrollment.status == 'enrolled'
+    ).all()
+    
+    result = []
+    for enrollment in enrollments:
+        student = db.query(models.Resume).filter(
+            models.Resume.id == enrollment.student_id
+        ).first()
+        
+        if student:
+            # Get today's attendance
+            today = datetime.now(timezone.utc).date()
+            today_attendance = db.query(models.Attendance).filter(
+                models.Attendance.student_id == student.id,
+                models.Attendance.session_id == session_id,
+                func.date(models.Attendance.date) == today
+            ).first()
+            
+            # Get attendance stats
+            attendance_count = db.query(models.Attendance).filter(
+                models.Attendance.student_id == student.id,
+                models.Attendance.session_id == session_id,
+                models.Attendance.status == 'present'
+            ).count()
+            
+            total_attendance = db.query(models.Attendance).filter(
+                models.Attendance.student_id == student.id,
+                models.Attendance.session_id == session_id
+            ).count()
+            
+            attendance_percentage = (attendance_count / total_attendance * 100) if total_attendance > 0 else 0
+            
+            result.append({
+                "student_id": student.id,
+                "student_name": student.name,
+                "student_email": student.email,
+                "enrollment_id": enrollment.id,
+                "progress": enrollment.progress,
+                "today_status": today_attendance.status if today_attendance else "not_marked",
+                "attendance_percentage": round(attendance_percentage, 2),
+                "present_days": attendance_count,
+                "total_days": total_attendance
+            })
+    
+    return result
+
+@app.post("/api/attendance/mark")
+def mark_attendance(attendance_data: AttendanceRequest, db: Session = Depends(get_db)):
+    """Mark attendance for a student"""
+    
+    # Check if student exists
+    student = db.query(models.Resume).filter(models.Resume.id == attendance_data.student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    # Check if session exists
+    session = db.query(models.TrainerSession).filter(
+        models.TrainerSession.id == attendance_data.session_id
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    # Check if already marked today
+    today = datetime.now(timezone.utc).date()
+    existing = db.query(models.Attendance).filter(
+        models.Attendance.student_id == attendance_data.student_id,
+        models.Attendance.session_id == attendance_data.session_id,
+        func.date(models.Attendance.date) == today
+    ).first()
+    
+    if existing:
+        # Update existing attendance
+        existing.status = attendance_data.status
+        existing.notes = attendance_data.notes or existing.notes
+        existing.marked_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(existing)
+        return {
+            "message": "Attendance updated",
+            "attendance_id": existing.id,
+            "student_id": existing.student_id,
+            "status": existing.status,
+            "date": existing.date
+        }
+    
+    # Create new attendance record
+    attendance = models.Attendance(
+        student_id=attendance_data.student_id,
+        session_id=attendance_data.session_id,
+        status=attendance_data.status,
+        notes=attendance_data.notes,
+        marked_by=None  # Will be set if trainer is logged in
+    )
+    
+    db.add(attendance)
+    db.commit()
+    db.refresh(attendance)
+    
+    return {
+        "message": "Attendance marked successfully",
+        "attendance_id": attendance.id,
+        "student_id": attendance.student_id,
+        "status": attendance.status,
+        "date": attendance.date
+    }
+
+@app.get("/api/attendance/{student_id}/{session_id}")
+def get_attendance(student_id: int, session_id: int, db: Session = Depends(get_db)):
+    """Get attendance records for a student in a session"""
+    
+    attendance_records = db.query(models.Attendance).filter(
+        models.Attendance.student_id == student_id,
+        models.Attendance.session_id == session_id
+    ).order_by(models.Attendance.date.desc()).all()
+    
+    result = []
+    for record in attendance_records:
+        result.append({
+            "id": record.id,
+            "date": record.date,
+            "status": record.status,
+            "notes": record.notes,
+            "marked_at": record.marked_at
+        })
+    
+    return result
+
+@app.get("/api/attendance/session/{session_id}")
+def get_session_attendance(session_id: int, db: Session = Depends(get_db)):
+    """Get all attendance records for a session (for trainers)"""
+    
+    attendance_records = db.query(models.Attendance).filter(
+        models.Attendance.session_id == session_id
+    ).order_by(models.Attendance.date.desc()).all()
+    
+    result = []
+    for record in attendance_records:
+        student = db.query(models.Resume).filter(
+            models.Resume.id == record.student_id
+        ).first()
+        
+        result.append({
+            "id": record.id,
+            "student_id": record.student_id,
+            "student_name": student.name if student else "Unknown",
+            "date": record.date,
+            "status": record.status,
+            "notes": record.notes,
+            "marked_at": record.marked_at
+        })
+    
+    return result
+
+@app.get("/api/attendance/student/{student_id}/summary")
+def get_student_attendance_summary(student_id: int, db: Session = Depends(get_db)):
+    """Get attendance summary for a student across all sessions"""
+    
+    # Get all enrollments
+    enrollments = db.query(models.Enrollment).filter(
+        models.Enrollment.student_id == student_id
+    ).all()
+    
+    result = []
+    for enrollment in enrollments:
+        session = db.query(models.TrainerSession).filter(
+            models.TrainerSession.id == enrollment.session_id
+        ).first()
+        
+        if session:
+            attendance_count = db.query(models.Attendance).filter(
+                models.Attendance.student_id == student_id,
+                models.Attendance.session_id == session.id,
+                models.Attendance.status == 'present'
+            ).count()
+            
+            total_attendance = db.query(models.Attendance).filter(
+                models.Attendance.student_id == student_id,
+                models.Attendance.session_id == session.id
+            ).count()
+            
+            attendance_percentage = (attendance_count / total_attendance * 100) if total_attendance > 0 else 0
+            
+            result.append({
+                "session_id": session.id,
+                "session_title": session.title,
+                "present_days": attendance_count,
+                "total_days": total_attendance,
+                "attendance_percentage": round(attendance_percentage, 2)
+            })
+    
+    return result
+
 @app.get("/api/health")
 def health_check():
     return {"status": "healthy"}

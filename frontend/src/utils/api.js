@@ -386,3 +386,86 @@ export const getPersonalizedTrainers = async (studentId) => {
         throw error
     }
 }
+
+export const enrollStudent = async (studentId, sessionId) => {
+    try {
+        const response = await axios.post(`${API_BASE_URL}/enroll`, {
+            student_id: studentId,
+            session_id: sessionId
+        })
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+export const getStudentEnrollments = async (studentId) => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/enrollments/${studentId}`)
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+export const updateEnrollmentProgress = async (enrollmentId, progress) => {
+    try {
+        const response = await axios.put(`${API_BASE_URL}/enrollment/${enrollmentId}/progress`, {
+            progress: progress
+        })
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+export const getSessionStudents = async (sessionId) => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/enrollment/session/${sessionId}/students`)
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+
+export const markAttendance = async (studentId, sessionId, status, notes = "") => {
+    try {
+        const response = await axios.post(`${API_BASE_URL}/attendance/mark`, {
+            student_id: studentId,
+            session_id: sessionId,
+            status: status,
+            notes: notes
+        })
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+export const getStudentAttendance = async (studentId, sessionId) => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/attendance/${studentId}/${sessionId}`)
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+export const getSessionAttendance = async (sessionId) => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/attendance/session/${sessionId}`)
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+export const getStudentAttendanceSummary = async (studentId) => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/attendance/student/${studentId}/summary`)
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}

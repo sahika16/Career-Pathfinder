@@ -178,12 +178,8 @@ function AppContent() {
         </ProtectedRoute>
       } />
 
-      {/* Learning Resources */}
-      <Route path="/learning-resources" element={
-        <ProtectedRoute user={user} allowedRoles={['student']}>
-          <LearningResourcesPage user={user} onLogout={handleLogout} />
-        </ProtectedRoute>
-      } />
+      {/* Learning Resources - NOW PUBLIC! No login required */}
+      <Route path="/learning-resources" element={<LearningResourcesPage user={user} onLogout={handleLogout} />} />
       
       {/* Student Dashboard */}
       <Route path="/student-dashboard" element={

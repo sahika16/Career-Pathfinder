@@ -25,12 +25,18 @@ function LearningResourcesPage({ user, onLogout }) {
     personalized_coaches: []
   })
   const [filteredTrainers, setFilteredTrainers] = useState([])
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
 
   useEffect(() => {
-    if (user?.resumeId) {
-      fetchAllData()
+    const storedUser = sessionStorage.getItem('careerUser')
+    if (storedUser) {
+      try {
+        const parsed = JSON.parse(storedUser)
+        setIsLoggedIn(!!parsed?.resumeId)
+      } catch (e) {}
     }
-  }, [user])
+    fetchAllData()
+  }, [])
 
   useEffect(() => {
     filterContent()
@@ -40,21 +46,55 @@ function LearningResourcesPage({ user, onLogout }) {
   const fetchAllData = async () => {
     try {
       setLoading(true)
-      const [contentData, recommendedData, trainersData, allTrainersData] = await Promise.all([
-        getStudentContent(user.resumeId),
-        getRecommendedContent(user.resumeId),
-        getPersonalizedTrainers(user.resumeId),
-        getAllTrainers()
-      ])
+      setError(null)
+
+      const storedUser = sessionStorage.getItem('careerUser')
+      let currentUser = null
+      if (storedUser) {
+        try {
+          currentUser = JSON.parse(storedUser)
+        } catch (e) {}
+      }
+
+      const studentId = currentUser?.resumeId || user?.resumeId
+
+      let contentData = { regular_content: [], member_content: [], personalized_coaches: [] }
+      let recommendedData = { recommended: [] }
+      let trainersData = []
+
+      if (studentId) {
+        try {
+          const [contentRes, recommendedRes, trainersRes] = await Promise.all([
+            getStudentContent(studentId),
+            getRecommendedContent(studentId),
+            getPersonalizedTrainers(studentId)
+          ])
+          contentData = contentRes || contentData
+          recommendedData = recommendedRes || { recommended: [] }
+          trainersData = trainersRes || []
+        } catch (err) {
+          console.log('⚠️ Error fetching personalized data:', err)
+        }
+      }
+
+      let allTrainersData = []
+      try {
+        allTrainersData = await getAllTrainers()
+      } catch (err) {
+        console.log('⚠️ Error fetching all trainers:', err)
+      }
+
+      const approvedTrainers = allTrainersData.filter(t => t.is_approved === true)
+      setAllTrainers(approvedTrainers)
+      setFilteredTrainers(approvedTrainers)
       setContent(contentData)
       setFilteredContent(contentData)
       setRecommended(recommendedData.recommended || [])
       setPersonalizedTrainers(trainersData || [])
-      const approvedTrainers = allTrainersData.filter(t => t.is_approved === true)
-      setAllTrainers(approvedTrainers)
-      setFilteredTrainers(approvedTrainers)
+
     } catch (err) {
-      setError('Failed to load learning resources')
+      console.error('Error fetching data:', err)
+      setError('Failed to load learning resources. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -102,7 +142,10 @@ function LearningResourcesPage({ user, onLogout }) {
       filtered = filtered.filter(t =>
         (t.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
         (t.specialty?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-        (t.skills_taught?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+        (t.skills_taught?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        (t.about?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        (t.expertise?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        (t.qualifications?.toLowerCase() || '').includes(searchTerm.toLowerCase())
       )
     }
     setFilteredTrainers(filtered)
@@ -182,14 +225,6 @@ function LearningResourcesPage({ user, onLogout }) {
     if (!dateString) return ''
     const date = new Date(dateString)
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  }
-
-  const getContentIcon = (type) => {
-    const icons = {
-      'pdf': '📄',
-      'document': '📄'
-    }
-    return icons[type] || '📄'
   }
 
   if (loading) {
@@ -381,6 +416,11 @@ function LearningResourcesPage({ user, onLogout }) {
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
                 <p className="text-gray-500">No content found</p>
                 {searchTerm && <p className="text-sm text-gray-400 mt-1">No results matching "{searchTerm}"</p>}
+                {!isLoggedIn && (
+                  <p className="text-sm text-blue-500 mt-2">
+                    Login to see personalized content recommendations!
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -392,6 +432,11 @@ function LearningResourcesPage({ user, onLogout }) {
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
                 <p className="text-gray-500">No recommendations yet.</p>
                 <p className="text-sm text-gray-400 mt-1">Complete your skill assessments to get personalized recommendations.</p>
+                {!isLoggedIn && (
+                  <p className="text-sm text-blue-500 mt-2">
+                    Login to see personalized recommendations!
+                  </p>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -436,6 +481,11 @@ function LearningResourcesPage({ user, onLogout }) {
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
                 <p className="text-gray-500">No trainers found.</p>
                 {searchTerm && <p className="text-sm text-gray-400 mt-1">No results matching "{searchTerm}"</p>}
+                {!isLoggedIn && (
+                  <p className="text-sm text-blue-500 mt-2">
+                    Login to see personalized trainer matches!
+                  </p>
+                )}
               </div>
             ) : (
               <div className="space-y-4">
@@ -574,6 +624,20 @@ function LearningResourcesPage({ user, onLogout }) {
                     </div>
                   )}
                 </div>
+
+                {selectedTrainer.expertise && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Expertise</label>
+                    <p className="text-gray-800">{selectedTrainer.expertise}</p>
+                  </div>
+                )}
+
+                {selectedTrainer.qualifications && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Qualifications</label>
+                    <p className="text-gray-800">{selectedTrainer.qualifications}</p>
+                  </div>
+                )}
 
                 {selectedTrainer.skills_taught && (
                   <div>

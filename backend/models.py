@@ -15,15 +15,12 @@ class Resume(Base):
     name = Column(String(100), nullable=True)
     email = Column(String(100), nullable=True)
     phone = Column(String(20), nullable=True)
-    
-    # ====== REGISTRATION FIELDS ======
     year_of_passout = Column(String(20), nullable=True)
     degree = Column(String(100), nullable=True)
     branch = Column(String(100), nullable=True)
-    experience = Column(Text, nullable=True)  # ✅ Changed to match main.py
-    skills = Column(Text, nullable=True)       # ✅ Added this field
+    experience = Column(Text, nullable=True) 
+    skills = Column(Text, nullable=True)       
     registered_without_resume = Column(Boolean, default=False)
-    # ==================================
     
     role = Column(String(20), default="student")
     password = Column(String(255), nullable=True)
@@ -45,6 +42,16 @@ class Resume(Base):
     status = Column(String(50), default="pending")
     uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
     processed_at = Column(DateTime(timezone=True), nullable=True)
+
+    referral_code = Column(String(20), nullable=True, unique=True)
+    referred_by = Column(String(20), nullable=True)  
+    referral_count = Column(Integer, default=0) 
+    referral_earnings = Column(Integer, default=0)  
+    
+    referred_users = relationship("Resume", 
+                                   remote_side=[id],
+                                   foreign_keys=[referred_by],
+                                   backref="referrer")
     
     skills = relationship("Skill", back_populates="resume", cascade="all, delete-orphan")
     concept_skills = relationship("ConceptSkill", back_populates="resume", cascade="all, delete-orphan")

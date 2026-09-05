@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../../components/Navbar'
-import API_BASE_URL from '../../config';
 import axios from 'axios'
+import API_BASE_URL from '../../config'
 
 function PersonalizedTrainerDashboard({ user, onLogout }) {
   const navigate = useNavigate()
@@ -30,8 +30,6 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
     available_days: [],
     available_time_start: '',
     available_time_end: '',
-    break_start: '',
-    break_end: '',
     hourly_rate: 0,
     skills_offered: []
   })
@@ -40,8 +38,6 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
     available_days: [],
     available_time_start: '',
     available_time_end: '',
-    break_start: '',
-    break_end: '',
     about: '',
     expertise: '',
     qualifications: '',
@@ -75,26 +71,23 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
     try {
       const response = await axios.get(`${API_BASE_URL}/trainer/settings/${user.id}`)
       if (response.data) {
+        const data = response.data
         setTrainerSettings({
-          available_days: response.data.available_days || [],
-          available_time_start: response.data.available_time_start || '',
-          available_time_end: response.data.available_time_end || '',
-          break_start: response.data.break_start || '',
-          break_end: response.data.break_end || '',
-          about: response.data.about || '',
-          expertise: response.data.expertise || '',
-          qualifications: response.data.qualifications || '',
-          hourly_rate: response.data.hourly_rate || '',
-          skills_taught: response.data.skills_taught || ''
+          available_days: data.available_days || [],
+          available_time_start: data.available_time_start || '',
+          available_time_end: data.available_time_end || '',
+          about: data.about || '',
+          expertise: data.expertise || '',
+          qualifications: data.qualifications || '',
+          hourly_rate: data.hourly_rate || '',
+          skills_taught: data.skills_taught || ''
         })
         setAvailability({
-          available_days: response.data.available_days || [],
-          available_time_start: response.data.available_time_start || '',
-          available_time_end: response.data.available_time_end || '',
-          break_start: response.data.break_start || '',
-          break_end: response.data.break_end || '',
-          hourly_rate: parseFloat(response.data.hourly_rate) || 0,
-          skills_offered: response.data.skills_taught ? response.data.skills_taught.split(',').map(s => s.trim()) : []
+          available_days: data.available_days || [],
+          available_time_start: data.available_time_start || '',
+          available_time_end: data.available_time_end || '',
+          hourly_rate: parseFloat(data.hourly_rate) || 0,
+          skills_offered: data.skills_taught ? data.skills_taught.split(',').map(s => s.trim()) : []
         })
       }
     } catch (err) {
@@ -220,8 +213,6 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
         available_days: availability.available_days,
         available_time_start: availability.available_time_start,
         available_time_end: availability.available_time_end,
-        break_start: availability.break_start,
-        break_end: availability.break_end,
         hourly_rate: availability.hourly_rate.toString(),
         skills_taught: availability.skills_offered.join(', '),
         about: trainerSettings.about,
@@ -231,9 +222,53 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
       
       await axios.put(`${API_BASE_URL}/trainer/settings/${user.id}`, settingsData)
       setSuccess('Availability and settings saved successfully!')
+      fetchTrainerSettings()
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to save settings')
+      setTimeout(() => setError(null), 3000)
+    }
+  }
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault()
+    try {
+      const settingsData = {
+        available_days: availability.available_days,
+        available_time_start: availability.available_time_start,
+        available_time_end: availability.available_time_end,
+        hourly_rate: availability.hourly_rate.toString(),
+        skills_taught: availability.skills_offered.join(', '),
+        about: trainerSettings.about,
+        expertise: trainerSettings.expertise,
+        qualifications: trainerSettings.qualifications
+      }
+      
+      await axios.put(`${API_BASE_URL}/trainer/settings/${user.id}`, settingsData)
+      setSuccess('Profile saved successfully!')
+      
+      setTrainerSettings({
+        available_days: [],
+        available_time_start: '',
+        available_time_end: '',
+        about: '',
+        expertise: '',
+        qualifications: '',
+        hourly_rate: '',
+        skills_taught: ''
+      })
+      setAvailability({
+        available_days: [],
+        available_time_start: '',
+        available_time_end: '',
+        hourly_rate: 0,
+        skills_offered: []
+      })
+      setSkillInput('')
+      
+      setTimeout(() => setSuccess(null), 3000)
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to save profile')
       setTimeout(() => setError(null), 3000)
     }
   }
@@ -674,7 +709,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
                   <input
@@ -691,26 +726,6 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
                     type="time"
                     name="available_time_end"
                     value={availability.available_time_end}
-                    onChange={handleAvailabilityChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Break Start</label>
-                  <input
-                    type="time"
-                    name="break_start"
-                    value={availability.break_start}
-                    onChange={handleAvailabilityChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Break End</label>
-                  <input
-                    type="time"
-                    name="break_end"
-                    value={availability.break_end}
                     onChange={handleAvailabilityChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                   />
@@ -782,7 +797,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
         {activeTab === 'settings' && (
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <h2 className="text-lg font-bold text-gray-800 mb-4">Profile Settings</h2>
-            <form onSubmit={handleSaveAvailability} className="space-y-4">
+            <form onSubmit={handleSaveProfile} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">About Me</label>

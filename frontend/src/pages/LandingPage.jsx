@@ -7,6 +7,7 @@ import HowItWorks from '../components/HowItWorks'
 import FAQ from '../components/FAQ'
 import ResumeUpload from '../components/ResumeUpload'
 import Footer from '../components/Footer'
+import Chatbot from '../components/Chatbot'  // Import Chatbot
 
 function LandingPage({ user, onLogout }) {
   const navigate = useNavigate()
@@ -32,8 +33,6 @@ function LandingPage({ user, onLogout }) {
     
     sessionStorage.setItem('careerUser', JSON.stringify(userData))
     sessionStorage.setItem('careerLoginTime', Date.now().toString())
-    
-    alert('User saved: ' + userData.name)
     
     navigate(`/skill-review/${data.id}`)
   }
@@ -97,6 +96,9 @@ function LandingPage({ user, onLogout }) {
       </section>
       
       <Footer />
+      
+      {/* AI Chatbot - Bottom Right Corner */}
+      <Chatbot />
     </div>
   )
 }

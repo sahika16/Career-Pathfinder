@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../../components/Navbar'
+import ReferralSection from '../../components/ReferralSection'
 import { getUserProgress, getAssessmentSkills } from '../../utils/api'
 
 function StudentDashboard({ user, onLogout }) {
@@ -10,6 +11,8 @@ function StudentDashboard({ user, onLogout }) {
   const [loading, setLoading] = useState(true)
   const [userName, setUserName] = useState('Student')
   const [userEmail, setUserEmail] = useState('')
+  const [resumeId, setResumeId] = useState(null)
+  const [showReferral, setShowReferral] = useState(false)
 
   useEffect(() => {
     const storedUser = sessionStorage.getItem('careerUser')
@@ -19,11 +22,14 @@ function StudentDashboard({ user, onLogout }) {
         if (parsedUser?.name) setUserName(parsedUser.name)
         if (parsedUser?.email) setUserEmail(parsedUser.email)
         if (parsedUser?.resumeId) {
+          setResumeId(parsedUser.resumeId)
           fetchAllData(parsedUser)
         } else {
           setLoading(false)
         }
-      } catch (e) {}
+      } catch (e) {
+        setLoading(false)
+      }
     } else {
       setLoading(false)
     }
@@ -142,6 +148,7 @@ function StudentDashboard({ user, onLogout }) {
           </h1>
           <p className="text-gray-500 text-sm">Continue your career journey</p>
         </div>
+
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 mb-8">
           <h2 className="text-xl font-bold text-gray-800 mb-6">Your Progress</h2>
           <div className="mb-4">
@@ -252,6 +259,30 @@ function StudentDashboard({ user, onLogout }) {
           >
             Learning Resources
           </button>
+        </div>
+
+        {/* Referral Section */}
+        <div className="mt-12">
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-4 border border-indigo-100">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="font-semibold text-gray-800">🎯 Refer & Earn</h3>
+                <p className="text-sm text-gray-500">Invite friends and earn rewards</p>
+              </div>
+              <button
+                onClick={() => setShowReferral(!showReferral)}
+                className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+              >
+                {showReferral ? 'Hide' : 'Show'} Referral Program
+              </button>
+            </div>
+            
+            {showReferral && (
+              <div className="mt-4">
+                <ReferralSection user={user || { resumeId: resumeId, name: userName, email: userEmail }} />
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

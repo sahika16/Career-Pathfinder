@@ -1,12 +1,18 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
 
 function Hero({ onUploadClick }) {
-  // Function to scroll to How It Works section
+  const navigate = useNavigate()
+
   const scrollToHowItWorks = () => {
     const section = document.getElementById('how-it-works')
     if (section) {
       section.scrollIntoView({ behavior: 'smooth' })
     }
+  }
+
+  const handleLearningResources = () => {
+    navigate('/learning-resources')
   }
 
   return (
@@ -20,12 +26,6 @@ function Hero({ onUploadClick }) {
       </div>
 
       {/* Floating Particles */}
-      <div className="absolute top-0 left-0 w-full h-full">
-        <div className="absolute top-10 left-[10%] text-4xl animate-bounce"></div>
-        <div className="absolute top-20 right-[15%] text-3xl animate-bounce delay-300"></div>
-        <div className="absolute top-1/2 left-[5%] text-3xl animate-pulse"></div>
-        <div className="absolute top-1/2 right-[5%] text-3xl animate-pulse delay-500"></div>
-      </div>
 
       <div className="max-w-7xl mx-auto text-center relative z-10">
         <div className="inline-block bg-white/20 backdrop-blur-xl px-8 py-3 rounded-full mb-8 border border-white/30 shadow-xl">
@@ -41,6 +41,7 @@ function Hero({ onUploadClick }) {
           Upload your resume and let analyze your skills, identify gaps, and create a personalized learning roadmap for your dream career.
         </p>
         
+        {/* Buttons */}
         <div className="mt-10 flex flex-col sm:flex-row justify-center gap-5">
           <button 
             onClick={onUploadClick} 
@@ -48,16 +49,19 @@ function Hero({ onUploadClick }) {
           >
             <span className="absolute inset-0 bg-gradient-to-r from-[#fddb92] to-[#f093fb] opacity-0 group-hover:opacity-100 transition duration-300"></span>
             <span className="relative z-10 flex items-center space-x-3">
-
               <span>Upload Resume</span>
             </span>
           </button>
+          
+          {/* Learning Resources - White background like Upload Resume */}
           <button 
-            onClick={scrollToHowItWorks}
-            className="px-10 py-4 rounded-full text-lg font-semibold text-white border-2 border-white/50 backdrop-blur-sm hover:bg-white/20 transition-all duration-300 flex items-center justify-center space-x-3 hover:scale-105 cursor-pointer"
+            onClick={handleLearningResources}
+            className="group relative px-10 py-4 rounded-full text-lg font-bold text-gray-900 bg-white hover:shadow-2xl transition-all duration-300 transform hover:scale-105 flex items-center justify-center space-x-3 overflow-hidden"
           >
-            <span>▶</span>
-            <span>How It Works</span>
+            <span className="absolute inset-0 bg-gradient-to-r from-[#fddb92] to-[#f093fb] opacity-0 group-hover:opacity-100 transition duration-300"></span>
+            <span className="relative z-10 flex items-center space-x-3">
+              <span>Learning Resources</span>
+            </span>
           </button>
         </div>
         
