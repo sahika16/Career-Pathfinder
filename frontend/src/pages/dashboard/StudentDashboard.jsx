@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../../components/Navbar'
 import ReferralSection from '../../components/ReferralSection'
-import { getUserProgress, getAssessmentSkills } from '../../utils/api'
+import { getUserProgress, getAssessmentSkills, getStudentEnrollments } from '../../utils/api'
 
 function StudentDashboard({ user, onLogout }) {
   const navigate = useNavigate()
@@ -13,6 +13,8 @@ function StudentDashboard({ user, onLogout }) {
   const [userEmail, setUserEmail] = useState('')
   const [resumeId, setResumeId] = useState(null)
   const [showReferral, setShowReferral] = useState(false)
+  const [enrollments, setEnrollments] = useState([])
+  const [loadingEnrollments, setLoadingEnrollments] = useState(false)
 
   useEffect(() => {
     const storedUser = sessionStorage.getItem('careerUser')
@@ -24,6 +26,7 @@ function StudentDashboard({ user, onLogout }) {
         if (parsedUser?.resumeId) {
           setResumeId(parsedUser.resumeId)
           fetchAllData(parsedUser)
+          fetchEnrollments(parsedUser.resumeId)
         } else {
           setLoading(false)
         }
@@ -50,6 +53,18 @@ function StudentDashboard({ user, onLogout }) {
       console.error('Error fetching data:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchEnrollments = async (studentId) => {
+    try {
+      setLoadingEnrollments(true)
+      const data = await getStudentEnrollments(studentId)
+      setEnrollments(data || [])
+    } catch (error) {
+      console.error('Error fetching enrollments:', error)
+    } finally {
+      setLoadingEnrollments(false)
     }
   }
 
@@ -113,6 +128,10 @@ function StudentDashboard({ user, onLogout }) {
     navigate('/learning-resources')
   }
 
+  const handleContinueCourse = (enrollmentId) => {
+    navigate('/learning-resources')
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -138,6 +157,13 @@ function StudentDashboard({ user, onLogout }) {
   const progressPercentage = (currentStepIndex / totalSteps) * 100
   const isAssessmentAvailable = progress?.skills_rated && assessmentSkills.length > 0
 
+  // Create user object for ReferralSection
+  const userForReferral = {
+    resumeId: resumeId,
+    name: userName,
+    email: userEmail
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <Navbar user={user} onLogout={onLogout} />
@@ -148,6 +174,52 @@ function StudentDashboard({ user, onLogout }) {
           </h1>
           <p className="text-gray-500 text-sm">Continue your career journey</p>
         </div>
+
+        {/* My Courses Section */}
+        {enrollments.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 mb-8">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-gray-800">📚 My Courses</h2>
+              <button
+                onClick={handleLearningResources}
+                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+              >
+                Browse More Courses →
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {enrollments.map((enrollment) => (
+                <div key={enrollment.enrollment_id} className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-100 hover:shadow-md transition">
+                  <h3 className="font-semibold text-gray-800">{enrollment.session_title}</h3>
+                  <p className="text-sm text-gray-600">Trainer: {enrollment.trainer_name}</p>
+                  <div className="mt-2">
+                    <div className="flex justify-between text-sm text-gray-600">
+                      <span>Progress</span>
+                      <span>{enrollment.progress}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-gray-200 rounded-full mt-1">
+                      <div 
+                        className="h-2 bg-blue-600 rounded-full transition-all duration-500"
+                        style={{ width: `${enrollment.progress}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-2 flex justify-between items-center">
+                    <span className="text-xs text-gray-500">
+                      Attendance: {enrollment.attendance_percentage}%
+                    </span>
+                    <button
+                      onClick={() => handleContinueCourse(enrollment.enrollment_id)}
+                      className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                    >
+                      Continue →
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 mb-8">
           <h2 className="text-xl font-bold text-gray-800 mb-6">Your Progress</h2>
@@ -279,7 +351,7 @@ function StudentDashboard({ user, onLogout }) {
             
             {showReferral && (
               <div className="mt-4">
-                <ReferralSection user={user || { resumeId: resumeId, name: userName, email: userEmail }} />
+                <ReferralSection user={userForReferral} />
               </div>
             )}
           </div>

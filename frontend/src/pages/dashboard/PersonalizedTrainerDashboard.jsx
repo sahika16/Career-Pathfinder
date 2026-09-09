@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../../components/Navbar'
 import axios from 'axios'
@@ -14,6 +14,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
   const [searchResult, setSearchResult] = useState(null)
   const [activeTab, setActiveTab] = useState('students')
   const [filterLevel, setFilterLevel] = useState('all')
+  const isMounted = useRef(true)
 
   const [formData, setFormData] = useState({
     student_email: '',
@@ -50,27 +51,53 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
   const [skillInput, setSkillInput] = useState('')
 
   useEffect(() => {
+    isMounted.current = true
     if (user && user.id) {
-      fetchStudents()
-      fetchTrainerSettings()
+      // Use Promise.all to fetch both simultaneously
+      Promise.all([
+        fetchStudents(),
+        fetchTrainerSettings()
+      ]).finally(() => {
+        if (isMounted.current) {
+          setLoading(false)
+        }
+      })
+    } else {
+      setLoading(false)
     }
-  }, [user])
+
+    return () => {
+      isMounted.current = false
+    }
+  }, [user?.id]) // Added user?.id as dependency
 
   const fetchStudents = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/trainer/personalized/students/${user.id}`)
-      setStudents(response.data)
+      const response = await axios.get(
+        `${API_BASE_URL}/trainer/personalized/students/${user.id}`,
+        { timeout: 15000 } // Added 15 second timeout
+      )
+      if (isMounted.current) {
+        setStudents(response.data || [])
+        setError(null)
+      }
     } catch (err) {
       console.error('Error fetching students:', err)
-    } finally {
-      setLoading(false)
+      if (isMounted.current) {
+        // Set empty array and show error but don't block UI
+        setStudents([])
+        setError('Could not load students. Please refresh.')
+      }
     }
   }
 
   const fetchTrainerSettings = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/trainer/settings/${user.id}`)
-      if (response.data) {
+      const response = await axios.get(
+        `${API_BASE_URL}/trainer/settings/${user.id}`,
+        { timeout: 15000 } // Added 15 second timeout
+      )
+      if (isMounted.current && response.data) {
         const data = response.data
         setTrainerSettings({
           available_days: data.available_days || [],
@@ -92,6 +119,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
       }
     } catch (err) {
       console.error('Error fetching trainer settings:', err)
+      // Don't show error for settings - use defaults
     }
   }
 
@@ -152,7 +180,10 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
       return
     }
     try {
-      const response = await axios.get(`${API_BASE_URL}/student/find/${formData.student_email}`)
+      const response = await axios.get(
+        `${API_BASE_URL}/student/find/${formData.student_email}`,
+        { timeout: 10000 }
+      )
       setSearchResult(response.data)
       setError(null)
     } catch (err) {
@@ -184,7 +215,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
         total_sessions: parseInt(formData.total_sessions) || 0,
         price_per_session: parseFloat(formData.price_per_session) || 0,
         session_duration: parseInt(formData.session_duration) || 0
-      })
+      }, { timeout: 15000 })
       setSuccess('Student assigned successfully!')
       setShowAddStudent(false)
       setFormData({ 
@@ -220,7 +251,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
         qualifications: trainerSettings.qualifications
       }
       
-      await axios.put(`${API_BASE_URL}/trainer/settings/${user.id}`, settingsData)
+      await axios.put(`${API_BASE_URL}/trainer/settings/${user.id}`, settingsData, { timeout: 15000 })
       setSuccess('Availability and settings saved successfully!')
       fetchTrainerSettings()
       setTimeout(() => setSuccess(null), 3000)
@@ -244,7 +275,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
         qualifications: trainerSettings.qualifications
       }
       
-      await axios.put(`${API_BASE_URL}/trainer/settings/${user.id}`, settingsData)
+      await axios.put(`${API_BASE_URL}/trainer/settings/${user.id}`, settingsData, { timeout: 15000 })
       setSuccess('Profile saved successfully!')
       
       setTrainerSettings({
@@ -275,7 +306,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
 
   const handleUpdateStatus = async (coachingId, status) => {
     try {
-      await axios.put(`${API_BASE_URL}/trainer/personalized/status/${coachingId}`, { status })
+      await axios.put(`${API_BASE_URL}/trainer/personalized/status/${coachingId}`, { status }, { timeout: 10000 })
       fetchStudents()
       setSuccess('Status updated successfully!')
       setTimeout(() => setSuccess(null), 3000)
@@ -286,7 +317,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
 
   const handleIncrementSession = async (coachingId) => {
     try {
-      await axios.put(`${API_BASE_URL}/trainer/personalized/session/${coachingId}`)
+      await axios.put(`${API_BASE_URL}/trainer/personalized/session/${coachingId}`, {}, { timeout: 10000 })
       fetchStudents()
       setSuccess('Session count updated!')
       setTimeout(() => setSuccess(null), 3000)
@@ -298,7 +329,7 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
   const handleDeleteCoaching = async (coachingId) => {
     if (window.confirm('Remove this student from coaching?')) {
       try {
-        await axios.delete(`${API_BASE_URL}/trainer/personalized/coaching/${coachingId}`)
+        await axios.delete(`${API_BASE_URL}/trainer/personalized/coaching/${coachingId}`, { timeout: 10000 })
         fetchStudents()
         setSuccess('Student removed successfully!')
         setTimeout(() => setSuccess(null), 3000)

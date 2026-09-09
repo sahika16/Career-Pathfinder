@@ -11,10 +11,8 @@ import StudentRegistration from './pages/student/StudentRegistration'
 import StudentDashboard from './pages/dashboard/StudentDashboard'
 import AdminDashboard from './pages/dashboard/AdminDashboard'
 import ProtectedRoute from './components/ProtectedRoute'
-
 import AssessmentPage from './pages/AssessmentPage'
 import TestResultsPage from './pages/TestResultsPage'
-
 import AdminSkills from './pages/AdminSkills'
 import AdminStudents from './pages/AdminStudents'
 import AdminTrainers from './pages/AdminTrainers'
@@ -24,6 +22,7 @@ import RegularTrainerDashboard from './pages/dashboard/RegularTrainerDashboard'
 import PersonalizedTrainerDashboard from './pages/dashboard/PersonalizedTrainerDashboard'
 
 import LearningResourcesPage from './pages/LearningResourcesPage'
+import EnrollmentPage from './pages/EnrollmentPage'
 
 const USER_STORAGE_KEY = 'careerUser'
 const LOGIN_TIME_KEY = 'careerLoginTime'
@@ -178,8 +177,15 @@ function AppContent() {
         </ProtectedRoute>
       } />
 
-      {/* Learning Resources - NOW PUBLIC! No login required */}
+      {/* Learning Resources - PUBLIC */}
       <Route path="/learning-resources" element={<LearningResourcesPage user={user} onLogout={handleLogout} />} />
+      
+      {/* Enrollment Page */}
+      <Route path="/enroll" element={
+        <ProtectedRoute user={user} allowedRoles={['student']}>
+          <EnrollmentPage user={user} onLogout={handleLogout} />
+        </ProtectedRoute>
+      } />
       
       {/* Student Dashboard */}
       <Route path="/student-dashboard" element={

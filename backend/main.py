@@ -16,6 +16,7 @@ from resume_parser import parse_resume
 import random
 import string
 from datetime import datetime, timedelta 
+
 class StudentRegister(BaseModel):
     name: str
     email: str
@@ -33,6 +34,7 @@ class StudentOTPRequest(BaseModel):
 class StudentOTPVerify(BaseModel):
     email: str
     otp: str
+
 from assessment import (
     generate_test_for_skill, 
     evaluate_test_submission, 
@@ -284,13 +286,30 @@ async def upload_resume(
         if phone:
             phone = normalize_phone_for_db(phone)
         
-        existing_student = db.query(models.Resume).filter(models.Resume.email == parsed_data.get('email')).first()
+        # Check if email is already registered as student (only check student table)
+        existing_student = db.query(models.Resume).filter(
+            func.lower(models.Resume.email) == func.lower(parsed_data.get('email', ''))
+        ).first()
+        
         if existing_student:
             raise HTTPException(status_code=400, detail="Email already registered as student")
         
-        existing_trainer = db.query(models.Trainer).filter(models.Trainer.email == parsed_data.get('email')).first()
+        # Check if phone is already registered as student
+        if phone:
+            existing_phone_student = db.query(models.Resume).filter(
+                models.Resume.phone == phone
+            ).first()
+            if existing_phone_student:
+                raise HTTPException(status_code=400, detail="Phone number already registered as student")
+        
+        # Check if email is registered as trainer - DON'T BLOCK, just log and allow
+        existing_trainer = db.query(models.Trainer).filter(
+            func.lower(models.Trainer.email) == func.lower(parsed_data.get('email', ''))
+        ).first()
+        
         if existing_trainer:
-            raise HTTPException(status_code=400, detail="Email already registered as trainer")
+            print(f"ℹ️ Email {parsed_data.get('email')} is already registered as trainer. Creating student profile as well.")
+            # Continue to create the student record - NO BLOCKING!
         
         resume = models.Resume(
             filename=file.filename,
@@ -302,7 +321,8 @@ async def upload_resume(
             phone=phone,
             status="processed",
             processed_at=datetime.now(),
-            current_step="review"
+            current_step="review",
+            role="student"
         )
         
         db.add(resume)
@@ -321,7 +341,8 @@ async def upload_resume(
         db.commit()
         db.refresh(resume)
         
-        return {
+        # Add extra info in response about dual role
+        response_data = {
             "message": "Resume uploaded successfully",
             "id": resume.id,
             "filename": resume.filename,
@@ -330,6 +351,14 @@ async def upload_resume(
             "phone": resume.phone,
             "skills": all_skills
         }
+        
+        # If user is also a trainer, add this info to response
+        if existing_trainer:
+            response_data["is_also_trainer"] = True
+            response_data["trainer_id"] = existing_trainer.id
+            response_data["message"] = "Resume uploaded successfully. You are registered as both trainer and student."
+        
+        return response_data
         
     except Exception as e:
         db.rollback()
@@ -607,6 +636,7 @@ def send_login_otp(login_data: dict, db: Session = Depends(get_db)):
             "phone": resume.phone,
             "expires_in": "5 minutes"
         }
+
 @app.post("/api/login/verify-otp")
 def verify_login_otp(verify_data: dict, db: Session = Depends(get_db)):
     otp = verify_data.get('otp')
@@ -717,7 +747,8 @@ def register_trainer(trainer_data: TrainerRegister, db: Session = Depends(get_db
     
     existing_student = db.query(models.Resume).filter(models.Resume.email == trainer_data.email).first()
     if existing_student:
-        print(f"⚠️ Email {trainer_data.email} is also a student, proceeding with trainer registration")
+        # Allow trainers to also be students
+        print(f"ℹ️ Email {trainer_data.email} is also a student, proceeding with trainer registration")
     
     hashed_password = bcrypt.hashpw(trainer_data.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     
@@ -740,7 +771,7 @@ def register_trainer(trainer_data: TrainerRegister, db: Session = Depends(get_db
     db.refresh(trainer)
     
     return {
-        "message": "Trainer registered successfully. Please wait for admin approval.",
+        "message": "Trainer registered successfully. You are now registered as both trainer and student." if existing_student else "Trainer registered successfully. Please wait for admin approval.",
         "id": trainer.id,
         "name": trainer.name,
         "email": trainer.email,
@@ -866,6 +897,7 @@ def update_trainer_settings(trainer_id: int, settings: dict, db: Session = Depen
         "hourly_rate": trainer.hourly_rate,
         "skills_taught": trainer.skills_taught
     }
+
 @app.post("/api/trainer/video")
 def add_trainer_video(video_data: dict, db: Session = Depends(get_db)):
     trainer_id = video_data.get('trainer_id')
@@ -1793,6 +1825,7 @@ def get_trainer_content(trainer_id: int, db: Session = Depends(get_db)):
             for c in contents
         ]
     }
+
 @app.get("/api/student/recommended-content/{student_id}")
 def get_recommended_content(student_id: int, db: Session = Depends(get_db)):
     """Get content recommended based on student's skills and ratings"""
@@ -2066,15 +2099,18 @@ def student_register(register_data: StudentRegister, db: Session = Depends(get_d
         "email": resume.email
     }
 
+# ====== REFERRAL ENDPOINTS ======
+
+import time
+
 def generate_referral_code(name):
-    """Generate a unique referral code"""
     name_part = name[:3].upper() if name else "STU"
-    digits = ''.join(random.choices(string.digits, k=4))
-    return f"{name_part}{digits}"
+    timestamp_part = str(int(time.time()))[-4:]
+    random_part = ''.join(random.choices(string.digits, k=2))
+    return f"{name_part}{timestamp_part}{random_part}"
 
 @app.post("/api/generate-referral")
 def generate_referral_code_for_user(gen_data: dict, db: Session = Depends(get_db)):
-    """Generate referral code for a student (works with email or resume_id)"""
     identifier = gen_data.get('identifier')
     name = gen_data.get('name', 'Student')
     email = gen_data.get('email', '')
@@ -2082,19 +2118,39 @@ def generate_referral_code_for_user(gen_data: dict, db: Session = Depends(get_db
     if not identifier:
         raise HTTPException(status_code=400, detail="Identifier required")
     
-    # Find user by resume_id, email, or phone
-    resume = db.query(models.Resume).filter(
-        (models.Resume.id == identifier) |
-        (models.Resume.email == identifier) |
-        (models.Resume.phone == identifier)
-    ).first()
+    resume = None
+    
+    # Try finding by email first
+    if email:
+        resume = db.query(models.Resume).filter(
+            func.lower(models.Resume.email) == func.lower(email)
+        ).first()
+    
+    # Try by identifier as email
+    if not resume and '@' in str(identifier):
+        resume = db.query(models.Resume).filter(
+            func.lower(models.Resume.email) == func.lower(str(identifier))
+        ).first()
+    
+    # Try by ID
+    if not resume and str(identifier).isdigit():
+        resume = db.query(models.Resume).filter(
+            models.Resume.id == int(identifier)
+        ).first()
+    
+    # Try by phone
+    if not resume:
+        resume = db.query(models.Resume).filter(
+            models.Resume.phone == identifier
+        ).first()
     
     if not resume:
-        # Create a temporary user record if doesn't exist
+        # Create a new student record
         resume = models.Resume(
             name=name,
-            email=email,
-            status="pending"
+            email=email if email else identifier,
+            status="active",
+            registered_without_resume=True
         )
         db.add(resume)
         db.commit()
@@ -2103,35 +2159,55 @@ def generate_referral_code_for_user(gen_data: dict, db: Session = Depends(get_db
     if resume.referral_code:
         return {
             "referral_code": resume.referral_code,
-            "message": "Referral code already exists"
+            "message": "Referral code already exists",
+            "referral_link": f"https://careerpath.synersyst.com/register?ref={resume.referral_code}"
         }
     
-    # Generate unique referral code
     code = generate_referral_code(name)
-    
-    # Make sure it's unique
+    counter = 0
     while db.query(models.Resume).filter(models.Resume.referral_code == code).first():
-        code = generate_referral_code(name)
+        code = generate_referral_code(name + str(counter))
+        counter += 1
     
     resume.referral_code = code
+    resume.referral_count = 0
+    resume.referral_earnings = 0
     db.commit()
     db.refresh(resume)
     
     return {
         "referral_code": code,
-        "message": "Referral code generated successfully"
+        "message": "Referral code generated successfully",
+        "referral_link": f"https://careerpath.synersyst.com/register?ref={code}"
     }
 
 @app.get("/api/referral/{identifier}")
 def get_referral_info(identifier: str, db: Session = Depends(get_db)):
-    """Get referral code and stats for a student"""
-    # Find by resume_id, email, or phone
-    resume = db.query(models.Resume).filter(
-        (models.Resume.id == identifier) |
-        (models.Resume.email == identifier) |
-        (models.Resume.phone == identifier) |
-        (models.Resume.referral_code == identifier)
-    ).first()
+    resume = None
+    
+    # Try by email first
+    if '@' in str(identifier):
+        resume = db.query(models.Resume).filter(
+            func.lower(models.Resume.email) == func.lower(str(identifier))
+        ).first()
+    
+    # Try by referral code
+    if not resume:
+        resume = db.query(models.Resume).filter(
+            models.Resume.referral_code == identifier
+        ).first()
+    
+    # Try by ID
+    if not resume and str(identifier).isdigit():
+        resume = db.query(models.Resume).filter(
+            models.Resume.id == int(identifier)
+        ).first()
+    
+    # Try by phone
+    if not resume:
+        resume = db.query(models.Resume).filter(
+            models.Resume.phone == identifier
+        ).first()
     
     if not resume:
         raise HTTPException(status_code=404, detail="Student not found")
@@ -2141,16 +2217,30 @@ def get_referral_info(identifier: str, db: Session = Depends(get_db)):
         models.Resume.referred_by == resume.referral_code
     ).count()
     
+    # Get referred users list
+    referred_users = db.query(models.Resume).filter(
+        models.Resume.referred_by == resume.referral_code
+    ).all()
+    
     return {
         "referral_code": resume.referral_code,
-        "referred_count": referred_count,
+        "referral_count": resume.referral_count or 0,
         "referral_earnings": resume.referral_earnings or 0,
-        "referral_link": f"https://careerpathfinder.com/signup?ref={resume.referral_code}"
+        "referred_count": referred_count,
+        "referred_users": [
+            {
+                "id": u.id,
+                "name": u.name,
+                "email": u.email,
+                "joined_at": u.uploaded_at
+            }
+            for u in referred_users
+        ],
+        "referral_link": f"https://careerpath.synersyst.com/register?ref={resume.referral_code}"
     }
 
 @app.post("/api/referral/apply")
 def apply_referral(apply_data: dict, db: Session = Depends(get_db)):
-    """Apply referral code when a new student signs up"""
     referral_code = apply_data.get('referral_code')
     student_id = apply_data.get('student_id')
     student_email = apply_data.get('student_email', '')
@@ -2166,19 +2256,25 @@ def apply_referral(apply_data: dict, db: Session = Depends(get_db)):
     if not referrer:
         raise HTTPException(status_code=404, detail="Invalid referral code")
     
-    # Find student by various identifiers
+    # Find the student
     student = None
-    if student_id:
+    
+    # Try by student_email first
+    if student_email:
         student = db.query(models.Resume).filter(
-            (models.Resume.id == student_id) |
-            (models.Resume.email == student_id) |
-            (models.Resume.phone == student_id)
+            func.lower(models.Resume.email) == func.lower(student_email)
         ).first()
     
-    if not student and student_email:
-        student = db.query(models.Resume).filter(
-            models.Resume.email == student_email
-        ).first()
+    # Try by student_id
+    if not student and student_id:
+        if str(student_id).isdigit():
+            student = db.query(models.Resume).filter(
+                models.Resume.id == int(student_id)
+            ).first()
+        if not student:
+            student = db.query(models.Resume).filter(
+                models.Resume.email == student_id
+            ).first()
     
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
@@ -2187,23 +2283,63 @@ def apply_referral(apply_data: dict, db: Session = Depends(get_db)):
     if referrer.id == student.id:
         raise HTTPException(status_code=400, detail="You cannot refer yourself")
     
-    # Check if student already has a referral
+    # Check if student already applied a referral
     if student.referred_by:
-        raise HTTPException(status_code=400, detail="Referral already applied")
+        raise HTTPException(status_code=400, detail="You have already applied a referral code")
     
-    # Apply referral
+    # Apply referral - give points to referrer
     student.referred_by = referral_code
     referrer.referral_count = (referrer.referral_count or 0) + 1
-    referrer.referral_earnings = (referrer.referral_earnings or 0) + 1
+    referrer.referral_earnings = (referrer.referral_earnings or 0) + 10
+    
+    # Also give 10 points to the new student (referred person)
+    student.referral_earnings = (student.referral_earnings or 0) + 10
     
     db.commit()
     
     return {
-        "message": "Referral applied successfully",
-        "referrer": referrer.name,
-        "referral_code": referral_code
+        "message": "Referral applied successfully! You both earned 10 points!",
+        "referrer": {
+            "id": referrer.id,
+            "name": referrer.name,
+            "email": referrer.email
+        },
+        "student": {
+            "id": student.id,
+            "name": student.name,
+            "email": student.email
+        },
+        "referral_code": referral_code,
+        "reward": "10 points added to both accounts"
     }
 
+@app.get("/api/referral/check/{student_id}")
+def check_referral_applied(student_id: str, db: Session = Depends(get_db)):
+    """Check if a student has already applied a referral code"""
+    student = None
+    
+    # Try by ID
+    if str(student_id).isdigit():
+        student = db.query(models.Resume).filter(
+            models.Resume.id == int(student_id)
+        ).first()
+    
+    # Try by email
+    if not student:
+        student = db.query(models.Resume).filter(
+            func.lower(models.Resume.email) == func.lower(str(student_id))
+        ).first()
+    
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    return {
+        "has_applied": student.referred_by is not None,
+        "referred_by": student.referred_by,
+        "student_id": student.id,
+        "student_name": student.name,
+        "student_email": student.email
+    }
 # ====== ENROLLMENT AND ATTENDANCE ENDPOINTS ======
 
 class EnrollmentRequest(BaseModel):

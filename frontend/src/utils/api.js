@@ -387,6 +387,8 @@ export const getPersonalizedTrainers = async (studentId) => {
     }
 }
 
+// ====== ENROLLMENT API FUNCTIONS ======
+
 export const enrollStudent = async (studentId, sessionId) => {
     try {
         const response = await axios.post(`${API_BASE_URL}/enroll`, {
@@ -428,6 +430,7 @@ export const getSessionStudents = async (sessionId) => {
     }
 }
 
+// ====== ATTENDANCE API FUNCTIONS ======
 
 export const markAttendance = async (studentId, sessionId, status, notes = "") => {
     try {
@@ -468,4 +471,32 @@ export const getStudentAttendanceSummary = async (studentId) => {
     } catch (error) {
         throw error
     }
+}
+
+
+export const getReferralInfo = async (identifier) => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/referral/${identifier}`)
+    return response.data
+  } catch (error) {
+    throw error
+  }
+}
+
+export const generateReferralCode = async (data) => {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/generate-referral`, data)
+    return response.data
+  } catch (error) {
+    throw error
+  }
+}
+
+export const applyReferral = async (data) => {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/referral/apply`, data)
+    return response.data
+  } catch (error) {
+    throw error
+  }
 }

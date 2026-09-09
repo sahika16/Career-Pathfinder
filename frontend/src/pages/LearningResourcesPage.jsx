@@ -1,7 +1,16 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
-import { getStudentContent, getRecommendedContent, getPersonalizedTrainers, getAllTrainers } from '../utils/api'
+import { 
+  getStudentContent, 
+  getRecommendedContent, 
+  getPersonalizedTrainers, 
+  getAllTrainers,
+  getStudentEnrollments,
+  enrollStudent,
+  getAllTestResults,
+  getAssessmentSkills
+} from '../utils/api'
 
 function LearningResourcesPage({ user, onLogout }) {
   const navigate = useNavigate()
@@ -11,6 +20,10 @@ function LearningResourcesPage({ user, onLogout }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedTrainer, setSelectedTrainer] = useState(null)
   const [showTrainerDetail, setShowTrainerDetail] = useState(false)
+  const [showEnrollModal, setShowEnrollModal] = useState(false)
+  const [selectedSession, setSelectedSession] = useState(null)
+  const [enrolling, setEnrolling] = useState(false)
+  const [successMessage, setSuccessMessage] = useState('')
   const [content, setContent] = useState({
     regular_content: [],
     member_content: [],
@@ -26,6 +39,13 @@ function LearningResourcesPage({ user, onLogout }) {
   })
   const [filteredTrainers, setFilteredTrainers] = useState([])
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [studentId, setStudentId] = useState(null)
+  const [studentName, setStudentName] = useState('')
+  const [enrollments, setEnrollments] = useState([])
+  const [testResults, setTestResults] = useState([])
+  const [skillLevels, setSkillLevels] = useState({})
+  const [recommendedCourses, setRecommendedCourses] = useState([])
+  const [hasTestResults, setHasTestResults] = useState(false)
 
   useEffect(() => {
     const storedUser = sessionStorage.getItem('careerUser')
@@ -33,6 +53,10 @@ function LearningResourcesPage({ user, onLogout }) {
       try {
         const parsed = JSON.parse(storedUser)
         setIsLoggedIn(!!parsed?.resumeId)
+        if (parsed?.resumeId) {
+          setStudentId(parsed.resumeId)
+          setStudentName(parsed.name || 'Student')
+        }
       } catch (e) {}
     }
     fetchAllData()
@@ -42,6 +66,15 @@ function LearningResourcesPage({ user, onLogout }) {
     filterContent()
     filterTrainers()
   }, [searchTerm, content, allTrainers])
+
+  // Fetch enrollments when studentId changes
+  useEffect(() => {
+    if (studentId) {
+      fetchEnrollments()
+      fetchTestResults()
+      fetchSkillLevels()
+    }
+  }, [studentId])
 
   const fetchAllData = async () => {
     try {
@@ -56,18 +89,18 @@ function LearningResourcesPage({ user, onLogout }) {
         } catch (e) {}
       }
 
-      const studentId = currentUser?.resumeId || user?.resumeId
+      const sid = currentUser?.resumeId || user?.resumeId
 
       let contentData = { regular_content: [], member_content: [], personalized_coaches: [] }
       let recommendedData = { recommended: [] }
       let trainersData = []
 
-      if (studentId) {
+      if (sid) {
         try {
           const [contentRes, recommendedRes, trainersRes] = await Promise.all([
-            getStudentContent(studentId),
-            getRecommendedContent(studentId),
-            getPersonalizedTrainers(studentId)
+            getStudentContent(sid),
+            getRecommendedContent(sid),
+            getPersonalizedTrainers(sid)
           ])
           contentData = contentRes || contentData
           recommendedData = recommendedRes || { recommended: [] }
@@ -97,6 +130,133 @@ function LearningResourcesPage({ user, onLogout }) {
       setError('Failed to load learning resources. Please try again.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchEnrollments = async () => {
+    try {
+      const data = await getStudentEnrollments(studentId)
+      setEnrollments(data || [])
+    } catch (err) {
+      console.error('Error fetching enrollments:', err)
+    }
+  }
+
+  const fetchTestResults = async () => {
+    try {
+      const results = await getAllTestResults(studentId)
+      setTestResults(results || [])
+      setHasTestResults(results && results.length > 0)
+      generateCourseRecommendations(results)
+    } catch (err) {
+      console.error('Error fetching test results:', err)
+      setHasTestResults(false)
+    }
+  }
+
+  const fetchSkillLevels = async () => {
+    try {
+      const skills = await getAssessmentSkills(studentId)
+      const levels = {}
+      skills.forEach(skill => {
+        const rating = skill.rating || 0
+        let level = 'beginner'
+        if (rating >= 8) level = 'advanced'
+        else if (rating >= 5) level = 'intermediate'
+        levels[skill.skill_name] = { rating, level }
+      })
+      setSkillLevels(levels)
+    } catch (err) {
+      console.error('Error fetching skill levels:', err)
+    }
+  }
+
+  const generateCourseRecommendations = (results) => {
+    // Get skill levels from test results
+    const skillLevelMap = {}
+    results.forEach(result => {
+      const score = result.score_percentage || 0
+      let level = 'beginner'
+      if (score >= 80) level = 'advanced'
+      else if (score >= 50) level = 'intermediate'
+      skillLevelMap[result.skill_name] = { score, level }
+    })
+
+    // Match courses based on skill levels
+    const recommended = []
+    allTrainers.forEach(trainer => {
+      if (!trainer.sessions) return
+      trainer.sessions.forEach(session => {
+        // Check if session matches student's skill level
+        const sessionSkill = session.category || ''
+        const matchedSkill = Object.keys(skillLevelMap).find(skill => 
+          sessionSkill.toLowerCase().includes(skill.toLowerCase()) ||
+          skill.toLowerCase().includes(sessionSkill.toLowerCase())
+        )
+        
+        if (matchedSkill) {
+          const level = skillLevelMap[matchedSkill].level
+          const sessionLevel = session.level?.toLowerCase() || 'beginner'
+          
+          // Match level (beginner, intermediate, advanced)
+          let matchScore = 0
+          if (sessionLevel === level) matchScore = 100
+          else if (sessionLevel === 'beginner' && level === 'intermediate') matchScore = 70
+          else if (sessionLevel === 'intermediate' && level === 'advanced') matchScore = 70
+          else if (sessionLevel === 'beginner' && level === 'advanced') matchScore = 50
+          else matchScore = 30
+
+          recommended.push({
+            ...session,
+            trainer_name: trainer.name,
+            trainer_id: trainer.id,
+            trainer_category: trainer.category,
+            skill_matched: matchedSkill,
+            skill_level: level,
+            match_score: matchScore,
+            test_score: skillLevelMap[matchedSkill].score
+          })
+        }
+      })
+    })
+
+    // Sort by match score (highest first)
+    recommended.sort((a, b) => b.match_score - a.match_score)
+    setRecommendedCourses(recommended.slice(0, 10)) // Top 10 recommendations
+  }
+
+  const isEnrolled = (sessionId) => {
+    return enrollments.some(e => e.session_id === sessionId)
+  }
+
+  const getEnrollmentStatus = (sessionId) => {
+    const enrollment = enrollments.find(e => e.session_id === sessionId)
+    return enrollment?.status || null
+  }
+
+  const handleEnroll = async (session) => {
+    if (!studentId) {
+      setError('Please login to enroll in courses.')
+      return
+    }
+
+    try {
+      setEnrolling(true)
+      setError(null)
+      
+      const response = await enrollStudent(studentId, session.id)
+      setSuccessMessage(`Successfully enrolled in "${session.title}"! 🎉`)
+      
+      // Refresh enrollments
+      await fetchEnrollments()
+      setShowEnrollModal(false)
+      
+      setTimeout(() => setSuccessMessage(''), 3000)
+    } catch (err) {
+      console.error('Error enrolling:', err)
+      setError(err.response?.data?.detail || 'Failed to enroll. Please try again.')
+    } finally {
+      setEnrolling(false)
     }
   }
 
@@ -171,6 +331,11 @@ function LearningResourcesPage({ user, onLogout }) {
     setSelectedTrainer(null)
   }
 
+  const handleOpenEnrollModal = (session) => {
+    setSelectedSession(session)
+    setShowEnrollModal(true)
+  }
+
   const getInitials = (name) => {
     if (!name) return 'T'
     const names = name.trim().split(' ')
@@ -216,15 +381,37 @@ function LearningResourcesPage({ user, onLogout }) {
     const styles = {
       'Beginner': 'bg-green-100 text-green-700',
       'Intermediate': 'bg-yellow-100 text-yellow-700',
-      'Advanced': 'bg-red-100 text-red-700'
+      'Advanced': 'bg-purple-100 text-purple-700'
     }
     return styles[difficulty] || 'bg-gray-100 text-gray-600'
+  }
+
+  const getSkillLevelBadge = (level) => {
+    const styles = {
+      'beginner': 'bg-green-100 text-green-700',
+      'intermediate': 'bg-yellow-100 text-yellow-700',
+      'advanced': 'bg-purple-100 text-purple-700'
+    }
+    return styles[level] || 'bg-gray-100 text-gray-600'
+  }
+
+  const getMatchScoreColor = (score) => {
+    if (score >= 80) return 'text-green-600 bg-green-50 border-green-200'
+    if (score >= 50) return 'text-yellow-600 bg-yellow-50 border-yellow-200'
+    return 'text-gray-600 bg-gray-50 border-gray-200'
   }
 
   const formatDate = (dateString) => {
     if (!dateString) return ''
     const date = new Date(dateString)
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
+  // Get skill level from rating
+  const getSkillLevelFromRating = (rating) => {
+    if (rating >= 8) return { level: 'advanced', label: 'Advanced', color: 'purple' }
+    if (rating >= 5) return { level: 'intermediate', label: 'Intermediate', color: 'yellow' }
+    return { level: 'beginner', label: 'Beginner', color: 'green' }
   }
 
   if (loading) {
@@ -259,13 +446,29 @@ function LearningResourcesPage({ user, onLogout }) {
             <h1 className="text-xl font-bold text-gray-900">Learning Resources</h1>
             <p className="text-sm text-gray-500">Find courses and connect with trainers</p>
           </div>
+          {isLoggedIn && studentId && (
+            <div className="ml-auto">
+              <button
+                onClick={() => navigate('/enroll')}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition"
+              >
+                📚 Browse All Courses
+              </button>
+            </div>
+          )}
         </div>
+
+        {successMessage && (
+          <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-lg mb-4">
+            {successMessage}
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-4">
             {error}
-            <button onClick={fetchAllData} className="ml-3 text-blue-600 hover:underline">
-              Retry
+            <button onClick={() => setError(null)} className="ml-3 text-blue-600 hover:underline">
+              Dismiss
             </button>
           </div>
         )}
@@ -294,7 +497,7 @@ function LearningResourcesPage({ user, onLogout }) {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            Content
+            📚 Content
           </button>
           <button
             onClick={() => setActiveTab('recommended')}
@@ -304,7 +507,7 @@ function LearningResourcesPage({ user, onLogout }) {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            Recommended
+            🎯 Recommended
           </button>
           <button
             onClick={() => setActiveTab('trainers')}
@@ -314,10 +517,11 @@ function LearningResourcesPage({ user, onLogout }) {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            Trainers
+            👨‍🏫 Trainers
           </button>
         </div>
 
+        {/* Content Tab */}
         {activeTab === 'content' && (
           <div className="space-y-8">
             {filteredContent.member_content.length > 0 && (
@@ -426,55 +630,213 @@ function LearningResourcesPage({ user, onLogout }) {
           </div>
         )}
 
+        {/* Recommended Tab - Unified with Content and Courses */}
         {activeTab === 'recommended' && (
           <div>
-            {recommended.length === 0 ? (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-                <p className="text-gray-500">No recommendations yet.</p>
-                <p className="text-sm text-gray-400 mt-1">Complete your skill assessments to get personalized recommendations.</p>
-                {!isLoggedIn && (
-                  <p className="text-sm text-blue-500 mt-2">
-                    Login to see personalized recommendations!
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {recommended.map((item) => (
-                  <div 
-                    key={item.content_id} 
-                    onClick={() => handleCardClick(item.content_url)}
-                    className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition overflow-hidden cursor-pointer"
-                  >
-                    <div className="h-32 bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-4xl">
-                      📄
-                    </div>
-                    <div className="p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">{getContentTypeLabel(item.content_type)}</span>
-                          {item.difficulty && (
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${getDifficultyBadge(item.difficulty)}`}>
-                              {item.difficulty}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <h3 className="font-semibold text-gray-800 text-base">{item.title}</h3>
-                      <p className="text-sm text-gray-500">By {item.trainer_name}</p>
-                      {item.skill_name && (
-                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full inline-block mt-1">
-                          {item.skill_name}
-                        </span>
-                      )}
+            {/* Show skill level info if logged in */}
+            {isLoggedIn && (
+              <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-200 mb-6">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">🎯</span>
+                  <div>
+                    <h3 className="font-semibold text-gray-800">Your Skill Levels</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Based on your test results and skill ratings. Courses are recommended based on your proficiency level.
+                    </p>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      <span className="text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded-full">
+                        🟢 Beginner (Rating: 1-4)
+                      </span>
+                      <span className="text-xs bg-yellow-100 text-yellow-700 px-2.5 py-1 rounded-full">
+                        🟡 Intermediate (Rating: 5-7)
+                      </span>
+                      <span className="text-xs bg-purple-100 text-purple-700 px-2.5 py-1 rounded-full">
+                        🟣 Advanced (Rating: 8-10)
+                      </span>
                     </div>
                   </div>
-                ))}
+                </div>
               </div>
+            )}
+
+            {!isLoggedIn ? (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+                <p className="text-gray-500">Please login to see personalized recommendations.</p>
+                <button
+                  onClick={() => navigate('/login/student')}
+                  className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition"
+                >
+                  Login Now
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Recommended Courses Section */}
+                {recommendedCourses.length > 0 && (
+                  <div className="mb-8">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-lg font-semibold text-gray-800">📚 Recommended Courses for You</h2>
+                      <span className="text-xs text-gray-500">{recommendedCourses.length} courses</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {recommendedCourses.map((course) => {
+                        const enrolled = isEnrolled(course.id)
+                        const status = getEnrollmentStatus(course.id)
+                        
+                        return (
+                          <div key={course.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition overflow-hidden">
+                            <div className="p-5">
+                              <div className="flex justify-between items-start">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h3 className="font-semibold text-gray-800">{course.title}</h3>
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${getDifficultyBadge(course.level || 'Beginner')}`}>
+                                      {course.level || 'Beginner'}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm text-gray-500">Trainer: {course.trainer_name}</p>
+                                  <div className="flex flex-wrap gap-2 mt-1">
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${getSkillLevelBadge(course.skill_level)}`}>
+                                      Your Level: {course.skill_level.charAt(0).toUpperCase() + course.skill_level.slice(1)}
+                                    </span>
+                                    <span className={`text-xs px-2 py-0.5 rounded-full border ${getMatchScoreColor(course.match_score)}`}>
+                                      Match: {course.match_score}%
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-sm font-semibold text-blue-600">
+                                    {course.price > 0 ? `₹${course.price}` : 'Free'}
+                                  </span>
+                                  <p className="text-xs text-gray-400">
+                                    {course.enrolled_count || 0}/{course.max_students || 10} enrolled
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="mt-3">
+                                <div className="flex justify-between text-xs text-gray-500">
+                                  <span>Match Score</span>
+                                  <span>{course.match_score}%</span>
+                                </div>
+                                <div className="w-full h-1.5 bg-gray-200 rounded-full mt-1">
+                                  <div 
+                                    className={`h-1.5 rounded-full transition-all duration-500 ${
+                                      course.match_score >= 80 ? 'bg-green-500' :
+                                      course.match_score >= 50 ? 'bg-yellow-500' : 'bg-gray-400'
+                                    }`}
+                                    style={{ width: `${course.match_score}%` }}
+                                  />
+                                </div>
+                              </div>
+
+                              {course.skill_matched && (
+                                <p className="text-xs text-gray-500 mt-2">
+                                  🎯 Based on your <span className="font-medium">{course.skill_matched}</span> skill 
+                                  (Test Score: {course.test_score || 0}%)
+                                </p>
+                              )}
+
+                              {course.description && (
+                                <p className="text-sm text-gray-600 mt-2 line-clamp-2">{course.description}</p>
+                              )}
+
+                              <div className="mt-4 flex flex-wrap gap-2">
+                                {enrolled ? (
+                                  <span className="text-xs text-green-600 font-medium px-3 py-1 bg-green-50 rounded-full">
+                                    {status === 'completed' ? '✅ Completed' : '✅ Enrolled'}
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() => handleOpenEnrollModal(course)}
+                                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition"
+                                  >
+                                    Enroll Now
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleViewTrainerDetails({
+                                    id: course.trainer_id,
+                                    name: course.trainer_name,
+                                    ...allTrainers.find(t => t.id === course.trainer_id)
+                                  })}
+                                  className="px-4 py-1.5 border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-medium transition"
+                                >
+                                  View Trainer
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recommended Content Section */}
+                {recommended.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-lg font-semibold text-gray-800">📄 Recommended Content</h2>
+                      <span className="text-xs text-gray-500">{recommended.length} items</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {recommended.map((item) => (
+                        <div 
+                          key={item.content_id} 
+                          onClick={() => handleCardClick(item.content_url)}
+                          className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition overflow-hidden cursor-pointer"
+                        >
+                          <div className="h-32 bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-4xl">
+                            📄
+                          </div>
+                          <div className="p-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500">{getContentTypeLabel(item.content_type)}</span>
+                                {item.difficulty && (
+                                  <span className={`text-xs px-2 py-0.5 rounded-full ${getDifficultyBadge(item.difficulty)}`}>
+                                    {item.difficulty}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <h3 className="font-semibold text-gray-800 text-base">{item.title}</h3>
+                            <p className="text-sm text-gray-500">By {item.trainer_name}</p>
+                            {item.skill_name && (
+                              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full inline-block mt-1">
+                                {item.skill_name}
+                              </span>
+                            )}
+                            {item.description && (
+                              <p className="text-sm text-gray-600 mt-2 line-clamp-2">{item.description}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* No Recommendations */}
+                {recommendedCourses.length === 0 && recommended.length === 0 && (
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+                    <p className="text-gray-500">No recommendations available yet.</p>
+                    <p className="text-sm text-gray-400 mt-1">Complete your skill assessments to get personalized course and content recommendations.</p>
+                    <button
+                      onClick={() => navigate('/student-dashboard')}
+                      className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition"
+                    >
+                      Go to Dashboard
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
 
+        {/* Trainers Tab */}
         {activeTab === 'trainers' && (
           <div>
             {filteredTrainers.length === 0 ? (
@@ -561,6 +923,36 @@ function LearningResourcesPage({ user, onLogout }) {
                           )}
                         </div>
                       </div>
+
+                      {/* Show sessions for this trainer */}
+                      {trainer.sessions && trainer.sessions.length > 0 && (
+                        <div className="mt-4 pt-4 border-t border-gray-100">
+                          <p className="text-xs font-medium text-gray-500 mb-2">Available Sessions:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {trainer.sessions.map((session) => {
+                              const enrolled = isEnrolled(session.id)
+                              return (
+                                <div key={session.id} className="bg-gray-50 rounded-lg px-3 py-2 border border-gray-200 flex items-center gap-3">
+                                  <span className="text-sm font-medium text-gray-700">{session.title}</span>
+                                  <span className="text-xs text-gray-500">
+                                    {session.level || 'Beginner'}
+                                  </span>
+                                  {enrolled ? (
+                                    <span className="text-xs text-green-600">✅ Enrolled</span>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleOpenEnrollModal({ ...session, trainer_name: trainer.name })}
+                                      className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                    >
+                                      Enroll
+                                    </button>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -570,6 +962,7 @@ function LearningResourcesPage({ user, onLogout }) {
         )}
       </div>
 
+      {/* Trainer Detail Modal */}
       {showTrainerDetail && selectedTrainer && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -714,12 +1107,65 @@ function LearningResourcesPage({ user, onLogout }) {
                 <button
                   onClick={() => {
                     closeTrainerDetail()
+                    navigate('/enroll')
                   }}
                   className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition font-medium"
                 >
-                  Book Session
+                  View All Courses
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enrollment Confirmation Modal */}
+      {showEnrollModal && selectedSession && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Confirm Enrollment</h2>
+            <p className="text-gray-600">
+              Are you sure you want to enroll in <span className="font-semibold">{selectedSession.title}</span>?
+            </p>
+            
+            <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+              <p className="text-sm text-gray-600">
+                Trainer: <span className="font-medium">{selectedSession.trainer_name || 'Unknown'}</span>
+              </p>
+              {selectedSession.level && (
+                <p className="text-sm text-gray-600">
+                  Level: <span className="font-medium">{selectedSession.level}</span>
+                </p>
+              )}
+              {selectedSession.price > 0 && (
+                <p className="text-sm text-gray-600">
+                  Price: <span className="font-semibold text-blue-600">₹{selectedSession.price}</span>
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowEnrollModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg transition font-medium"
+                disabled={enrolling}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleEnroll(selectedSession)}
+                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition font-medium flex items-center justify-center"
+                disabled={enrolling}
+              >
+                {enrolling ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                    Enrolling...
+                  </>
+                ) : (
+                  'Enroll Now'
+                )}
+              </button>
             </div>
           </div>
         </div>

@@ -1,14 +1,16 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import Navbar from '../../components/Navbar'
 import axios from 'axios'
 import API_BASE_URL from '../../config'
 
 function StudentRegistration() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
+  const [referralCode, setReferralCode] = useState(null)
 
   const [formData, setFormData] = useState({
     name: '',
@@ -20,6 +22,17 @@ function StudentRegistration() {
     experience: '',
     skills: ''
   })
+
+  // Check for referral code in URL
+  useEffect(() => {
+    const ref = searchParams.get('ref')
+    if (ref) {
+      setReferralCode(ref)
+      // Store referral code in sessionStorage for later use
+      sessionStorage.setItem('referralCode', ref)
+      console.log('Referral code detected:', ref)
+    }
+  }, [searchParams])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -57,7 +70,6 @@ function StudentRegistration() {
           return
         }
       } catch (err) {
-        // If endpoint returns 404, it means email doesn't exist (which is good)
         if (err.response?.status !== 404) {
           console.error('Email check error:', err)
         }
@@ -72,14 +84,13 @@ function StudentRegistration() {
           return
         }
       } catch (err) {
-        // If endpoint returns 404, it means phone doesn't exist (which is good)
         if (err.response?.status !== 404) {
           console.error('Phone check error:', err)
         }
       }
 
-      // Direct Registration
-      await axios.post(`${API_BASE_URL}/student/register`, {
+      // Register the student
+      const registerResponse = await axios.post(`${API_BASE_URL}/student/register`, {
         name: formData.name.trim(),
         email: formData.email.trim(),
         phone: formData.phone.trim(),
@@ -90,7 +101,24 @@ function StudentRegistration() {
         skills: formData.skills || ''
       })
 
-      setSuccess('Registration successful! Redirecting to login...')
+      const studentId = registerResponse.data.id
+
+      // If referral code exists, apply it
+      if (referralCode) {
+        try {
+          await axios.post(`${API_BASE_URL}/referral/apply`, {
+            referral_code: referralCode,
+            student_id: studentId,
+            student_email: formData.email.trim()
+          })
+          console.log('✅ Referral code applied successfully!')
+        } catch (refError) {
+          console.error('Error applying referral code:', refError)
+          // Don't block registration if referral fails
+        }
+      }
+
+      setSuccess('Registration successful! You earned 10 bonus points! Redirecting to login...')
       setTimeout(() => {
         navigate('/login/student')
       }, 2000)
@@ -134,6 +162,11 @@ function StudentRegistration() {
             <p className="text-gray-600 mt-2">
               Register with your details to get started
             </p>
+            {referralCode && (
+              <div className="mt-3 inline-block bg-green-50 border border-green-200 text-green-700 px-4 py-2 rounded-lg text-sm">
+                🎉 Referral code <strong>{referralCode}</strong> detected! You'll get 10 bonus points!
+              </div>
+            )}
           </div>
 
           {error && (
