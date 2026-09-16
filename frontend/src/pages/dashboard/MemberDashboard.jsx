@@ -3,6 +3,7 @@ import API_BASE_URL from '../../config';
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../../components/Navbar'
 import axios from 'axios'
+import imageCompression from 'browser-image-compression'
 
 function MemberDashboard({ user, onLogout }) {
   const navigate = useNavigate()
@@ -19,10 +20,13 @@ function MemberDashboard({ user, onLogout }) {
   })
   const [selectedFile, setSelectedFile] = useState(null)
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState('')
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
   const [selectedContent, setSelectedContent] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
+
+  const MAX_FILE_SIZE_MB = 0.9
 
   useEffect(() => {
     fetchContents()
@@ -30,7 +34,7 @@ function MemberDashboard({ user, onLogout }) {
 
   const fetchContents = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/member/contents/${user.id}`)
+      const response = await axios.get(`${API_BASE_URL}/trainer/content/${user.id}`)
       setContents(response.data)
     } catch (err) {
       console.error('Error fetching contents:', err)
@@ -46,21 +50,84 @@ function MemberDashboard({ user, onLogout }) {
   const handleFileChange = (e) => {
     const file = e.target.files[0]
     if (file) {
+      const sizeMB = file.size / (1024 * 1024)
+      if (sizeMB > 50) {
+        setError(`File too large: ${sizeMB.toFixed(2)} MB. Max is 50MB.`)
+        setTimeout(() => setError(null), 5000)
+        e.target.value = ''
+        return
+      }
+
       setSelectedFile(file)
+
+      // Auto-detect content type
       if (file.type.startsWith('video/')) {
         setFormData({ ...formData, content_type: 'video' })
       } else if (file.type === 'application/pdf') {
         setFormData({ ...formData, content_type: 'document' })
       } else if (file.type.startsWith('image/')) {
         setFormData({ ...formData, content_type: 'image' })
+      } else if (file.type.includes('word') || file.type.includes('document')) {
+        setFormData({ ...formData, content_type: 'document' })
+      } else if (file.type.includes('presentation') || file.type.includes('powerpoint')) {
+        setFormData({ ...formData, content_type: 'presentation' })
       }
     }
+  }
+
+  const compressFile = async (file) => {
+    const sizeMB = file.size / (1024 * 1024)
+    const fileType = file.type
+
+    if (fileType.startsWith('image/')) {
+      setUploadProgress(`Compressing image (${sizeMB.toFixed(2)} MB)...`)
+      try {
+        const options = {
+          maxSizeMB: MAX_FILE_SIZE_MB,
+          maxWidthOrHeight: 1920,
+          useWebWorker: true,
+          initialQuality: 0.85
+        }
+        const compressed = await imageCompression(file, options)
+        const newSizeMB = compressed.size / (1024 * 1024)
+        setUploadProgress(`Image compressed: ${sizeMB.toFixed(2)} MB → ${newSizeMB.toFixed(2)} MB`)
+        return compressed
+      } catch (err) {
+        console.warn('Image compression failed:', err)
+        return file
+      }
+    }
+
+    if (fileType === 'application/pdf') {
+      if (sizeMB > MAX_FILE_SIZE_MB) {
+        throw new Error(
+          `PDF is ${sizeMB.toFixed(2)} MB — too large for direct upload (limit ${MAX_FILE_SIZE_MB} MB).\n\n` +
+          `Options:\n` +
+          `1. Use the "Paste URL" field (upload PDF to Google Drive/Dropbox, paste the link)\n` +
+          `2. Compress PDF externally (ilovepdf.com, smallpdf.com)\n` +
+          `3. Ask admin to increase server upload limit`
+        )
+      }
+      return file
+    }
+
+    if (sizeMB > MAX_FILE_SIZE_MB) {
+      throw new Error(
+        `File is ${sizeMB.toFixed(2)} MB — too large for direct upload (limit ${MAX_FILE_SIZE_MB} MB).\n\n` +
+        `Please use the "Paste URL" field instead:\n` +
+        `• Videos → upload to YouTube, paste link\n` +
+        `• Docs → upload to Google Drive/Dropbox, paste shareable link`
+      )
+    }
+
+    return file
   }
 
   const handleAddContent = async (e) => {
     e.preventDefault()
     setUploading(true)
     setError(null)
+    setUploadProgress('')
 
     if (!selectedFile && !formData.content_url.trim()) {
       setError('Please either upload a file or provide a URL')
@@ -72,16 +139,52 @@ function MemberDashboard({ user, onLogout }) {
       let contentUrl = formData.content_url
 
       if (selectedFile) {
+        setUploadProgress('Preparing file...')
+
+        let fileToUpload
+        try {
+          fileToUpload = await compressFile(selectedFile)
+        } catch (compressErr) {
+          setError(compressErr.message)
+          setUploading(false)
+          setUploadProgress('')
+          setTimeout(() => setError(null), 10000)
+          return
+        }
+
+        const finalSizeMB = fileToUpload.size / (1024 * 1024)
+        if (finalSizeMB > MAX_FILE_SIZE_MB) {
+          setError(
+            `File is still ${finalSizeMB.toFixed(2)} MB after processing (limit ${MAX_FILE_SIZE_MB} MB).\n\n` +
+            `Please paste a URL instead.`
+          )
+          setUploading(false)
+          setUploadProgress('')
+          setTimeout(() => setError(null), 10000)
+          return
+        }
+
+        setUploadProgress(`Uploading ${finalSizeMB.toFixed(2)} MB...`)
+
         const uploadFormData = new FormData()
-        uploadFormData.append('file', selectedFile)
+        uploadFormData.append('file', fileToUpload)
         uploadFormData.append('trainer_id', user.id)
 
-        const uploadResponse = await axios.post('${API_BASE_URL}/member/upload', uploadFormData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
+        const uploadResponse = await axios.post(
+          `${API_BASE_URL}/member/upload`,
+          uploadFormData,
+          {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            onUploadProgress: (progressEvent) => {
+              const percent = Math.round(
+                (progressEvent.loaded * 100) / progressEvent.total
+              )
+              setUploadProgress(`Uploading... ${percent}%`)
+            }
           }
-        })
+        )
         contentUrl = uploadResponse.data.url
+        setUploadProgress('File uploaded, saving content...')
       }
 
       const payload = {
@@ -94,17 +197,34 @@ function MemberDashboard({ user, onLogout }) {
         trainer_id: user.id
       }
 
-      await axios.post('${API_BASE_URL}/member/content', payload)
+      await axios.post(`${API_BASE_URL}/member/content`, payload)
 
-      setSuccess('Content added successfully!')
+      setSuccess('✅ Content submitted successfully! Waiting for admin approval.')
       setShowAddContent(false)
       setFormData({ title: '', description: '', content_type: '', content_url: '', skill_name: '', difficulty: '' })
       setSelectedFile(null)
       fetchContents()
-      setTimeout(() => setSuccess(null), 3000)
+      setUploadProgress('')
+      setTimeout(() => setSuccess(null), 5000)
     } catch (err) {
       console.error('Add content error:', err)
-      setError(err.response?.data?.detail || 'Failed to add content')
+
+      if (err.response?.status === 413) {
+        setError(
+          'File too large for server. Please:\n' +
+          '1. Use the URL field instead, OR\n' +
+          '2. Compress the file, OR\n' +
+          '3. Contact admin to increase upload limit'
+        )
+      } else if (err.response?.status === 500) {
+        setError('Server error. Please try again or use the URL field.')
+      } else if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        setError('Upload timed out. Please try a smaller file or use a URL.')
+      } else {
+        setError(err.response?.data?.detail || err.message || 'Failed to add content')
+      }
+      setUploadProgress('')
+      setTimeout(() => setError(null), 8000)
     } finally {
       setUploading(false)
     }
@@ -135,29 +255,41 @@ function MemberDashboard({ user, onLogout }) {
   const getContentIcon = (type) => {
     switch(type) {
       case 'video': return '🎬'
+      case 'pdf': return '📄'
       case 'document': return '📄'
       case 'image': return '🖼️'
       case 'quiz': return '📝'
       case 'assignment': return '📋'
+      case 'notes': return '📓'
+      case 'presentation': return '📊'
       default: return '📎'
     }
   }
 
   const getDifficultyColor = (difficulty) => {
     switch(difficulty) {
-      case 'Easy': return 'bg-green-500'
-      case 'Medium': return 'bg-yellow-500'
-      case 'Hard': return 'bg-red-500'
-      default: return 'bg-gray-500'
+      case 'Easy': return '#16A36A'
+      case 'Medium': return '#E9A238'
+      case 'Hard': return '#DC2626'
+      default: return '#475467'
     }
   }
 
-  const getDifficultyBadge = (difficulty) => {
-    switch(difficulty) {
-      case 'Easy': return 'Easy'
-      case 'Medium': return 'Medium'
-      case 'Hard': return 'Hard'
-      default: return 'N/A'
+  const getStatusBadge = (status) => {
+    const styles = {
+      'pending': 'bg-yellow-100 text-yellow-700 border-yellow-300',
+      'approved': 'bg-green-100 text-green-700 border-green-300',
+      'rejected': 'bg-red-100 text-red-700 border-red-300'
+    }
+    return styles[status] || 'bg-gray-100 text-gray-600 border-gray-200'
+  }
+
+  const getStatusLabel = (status) => {
+    switch(status) {
+      case 'approved': return '✓ Approved'
+      case 'rejected': return '✕ Rejected'
+      case 'pending': return '⏳ Pending Approval'
+      default: return '⏳ Pending Approval'
     }
   }
 
@@ -167,7 +299,7 @@ function MemberDashboard({ user, onLogout }) {
     const url = selectedContent.content_url
     const type = selectedContent.content_type
 
-    if (type === 'document' && url && url.endsWith('.pdf')) {
+    if (type === 'document' && url && url.toLowerCase().endsWith('.pdf')) {
       return (
         <div className="w-full h-[500px]">
           <object
@@ -217,7 +349,7 @@ function MemberDashboard({ user, onLogout }) {
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-600 hover:text-blue-800 text-lg font-medium hover:underline"
+            className="text-blue-600 hover:text-blue-800 text-lg font-medium hover:underline break-all"
           >
             🔗 {url}
           </a>
@@ -263,7 +395,7 @@ function MemberDashboard({ user, onLogout }) {
         )}
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-4">
+          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-4 whitespace-pre-line">
             {error}
           </div>
         )}
@@ -282,6 +414,10 @@ function MemberDashboard({ user, onLogout }) {
         {showAddContent && (
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mb-6">
             <h2 className="text-lg font-bold text-gray-800 mb-4">Add New Content</h2>
+            <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg mb-4">
+              ℹ️ All content requires admin approval before being visible to students.
+              For large files (&gt;1 MB), use the URL field instead.
+            </p>
             <form onSubmit={handleAddContent} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -309,8 +445,11 @@ function MemberDashboard({ user, onLogout }) {
                     <option value="video">Video</option>
                     <option value="document">Document</option>
                     <option value="image">Image</option>
+                    <option value="notes">Notes</option>
+                    <option value="presentation">Presentation</option>
                     <option value="quiz">Quiz</option>
                     <option value="assignment">Assignment</option>
+                    <option value="other">Other</option>
                   </select>
                 </div>
                 <div>
@@ -351,7 +490,12 @@ function MemberDashboard({ user, onLogout }) {
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Upload File or Paste Link</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Upload File or Paste Link
+                    <span className="text-xs text-gray-400 font-normal ml-2">
+                      (Max ~1 MB for file upload — use URL for larger files)
+                    </span>
+                  </label>
                   <div className="flex gap-3">
                     <input
                       type="url"
@@ -359,13 +503,13 @@ function MemberDashboard({ user, onLogout }) {
                       value={formData.content_url}
                       onChange={handleInputChange}
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                      placeholder="Paste URL here"
+                      placeholder="Paste URL here (recommended for large files)"
                     />
                     <div className="relative">
                       <input
                         type="file"
                         onChange={handleFileChange}
-                        accept="video/*,application/pdf,image/*"
+                        accept="video/*,application/pdf,image/*,.doc,.docx,.ppt,.pptx,.txt"
                         className="absolute inset-0 opacity-0 cursor-pointer w-full"
                       />
                       <button
@@ -377,22 +521,48 @@ function MemberDashboard({ user, onLogout }) {
                     </div>
                   </div>
                   {selectedFile && (
-                    <p className="text-xs text-green-600 mt-1">Selected: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)</p>
+                    <div className="mt-1">
+                      <p className="text-xs text-green-600">
+                        Selected: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                      </p>
+                      {selectedFile.size > 1 * 1024 * 1024 && selectedFile.type === 'application/pdf' && (
+                        <p className="text-xs text-amber-600 font-medium mt-1">
+                          ⚠️ PDF is larger than 1 MB — will be rejected. Please use URL field instead.
+                        </p>
+                      )}
+                      {selectedFile.size > 1 * 1024 * 1024 && selectedFile.type.startsWith('image/') && (
+                        <p className="text-xs text-blue-600 font-medium mt-1">
+                          ℹ️ Image will be compressed automatically before upload.
+                        </p>
+                      )}
+                      {selectedFile.size > 1 * 1024 * 1024 && !selectedFile.type.startsWith('image/') && selectedFile.type !== 'application/pdf' && (
+                        <p className="text-xs text-amber-600 font-medium mt-1">
+                          ⚠️ File is larger than 1 MB — may be rejected. Consider using URL field.
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
+
+              {uploadProgress && (
+                <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm">
+                  ⏳ {uploadProgress}
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={uploading}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50"
               >
-                {uploading ? 'Uploading...' : 'Add Content'}
+                {uploading ? 'Submitting...' : 'Submit Content for Approval'}
               </button>
             </form>
           </div>
         )}
 
-        {/* Content Cards - Title & Date on Same Line, Skill, then Description */}
+        {/* Content Cards - With Status Badge */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {contents.length === 0 ? (
             <div className="col-span-full bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
@@ -408,17 +578,28 @@ function MemberDashboard({ user, onLogout }) {
                 <div className="relative aspect-video bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
                   <span className="text-4xl opacity-50">{getContentIcon(content.content_type)}</span>
                   
-                  <div className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-xs font-medium text-white shadow-lg ${getDifficultyColor(content.difficulty)}`}>
-                    {getDifficultyBadge(content.difficulty)}
+                  {/* Difficulty Badge - Top Left */}
+                  <div 
+                    className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-xs font-bold text-white shadow-lg"
+                    style={{ backgroundColor: getDifficultyColor(content.difficulty) }}
+                  >
+                    {content.difficulty || 'N/A'}
                   </div>
 
+                  {/* Approval Status Badge - Top Right */}
+                  <div className={`absolute top-2 right-2 px-2 py-0.5 rounded-full text-xs font-bold border-2 shadow-lg ${getStatusBadge(content.status)}`}>
+                    {getStatusLabel(content.status)}
+                  </div>
+
+                  {/* Content Type - Bottom Left */}
                   <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-full text-xs font-medium text-white bg-black/50 backdrop-blur-sm">
                     {content.content_type}
                   </div>
 
+                  {/* Delete Button - Bottom Right */}
                   <button
                     onClick={(e) => handleDeleteContent(content.id, e)}
-                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 shadow-lg"
+                    className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 shadow-lg"
                   >
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -437,14 +618,14 @@ function MemberDashboard({ user, onLogout }) {
                     </span>
                   </div>
 
-                  {/* Skill - Below Title */}
+                  {/* Skill Below Title */}
                   {content.skill_name && (
                     <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-medium inline-block mt-1">
                       {content.skill_name}
                     </span>
                   )}
                   
-                  {/* Description - Below Skill */}
+                  {/* Description */}
                   {content.description && (
                     <p className="text-xs text-gray-500 mt-1.5 line-clamp-2">
                       {content.description}
@@ -477,6 +658,15 @@ function MemberDashboard({ user, onLogout }) {
             </div>
 
             <div className="p-6">
+              {/* Status Banner */}
+              <div className={`mb-4 px-4 py-2 rounded-lg border-2 ${getStatusBadge(selectedContent.status)}`}>
+                <span className="font-semibold">
+                  {selectedContent.status === 'approved' ? '✓ This content has been approved' :
+                   selectedContent.status === 'rejected' ? '✕ This content was rejected' :
+                   '⏳ Waiting for admin approval'}
+                </span>
+              </div>
+
               {selectedContent.description && (
                 <div className="mb-4 p-4 bg-gray-50 rounded-lg">
                   <p className="text-gray-700 text-sm">{selectedContent.description}</p>

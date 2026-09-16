@@ -980,7 +980,8 @@ async def upload_file(file: UploadFile = File(...), trainer_id: int = None):
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        url = f"http://localhost:8000/uploads/{filename}"
+        base_url = os.getenv("APP_BASE_URL", "https://careerpath.synersyst.com")
+        url = f"{base_url}/uploads/{filename}"
         
         return {
             "url": url,
@@ -990,7 +991,7 @@ async def upload_file(file: UploadFile = File(...), trainer_id: int = None):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
-
+    
 @app.post("/api/member/content")
 def add_content(content_data: dict, db: Session = Depends(get_db)):
     trainer_id = content_data.get('trainer_id')
@@ -1066,8 +1067,8 @@ def add_session(session_data: dict, db: Session = Depends(get_db)):
     session_date = session_data.get('session_date')
     start_time = session_data.get('start_time')
     end_time = session_data.get('end_time')
-    duration_minutes = session_data.get('duration_minutes', 60)
-    max_students = session_data.get('max_students', 10)
+    duration_minutes = session_data.get('duration_minutes')
+    max_students = session_data.get('max_students')
     price = session_data.get('price', 0)
     category = session_data.get('category')
     level = session_data.get('level')
@@ -2699,6 +2700,516 @@ def get_student_attendance_summary(student_id: int, db: Session = Depends(get_db
             })
     
     return result
+
+# ====== CONTENT APPROVAL ENDPOINTS ======
+
+@app.get("/api/admin/content/pending")
+def get_pending_content(db: Session = Depends(get_db)):
+    """Admin gets pending content for approval"""
+    content = db.query(models.TrainerContent).filter(
+        models.TrainerContent.is_approved == False,
+        models.TrainerContent.status == "pending"
+    ).order_by(models.TrainerContent.created_at.desc()).all()
+    
+    return [
+        {
+            "id": c.id,
+            "title": c.title,
+            "description": c.description,
+            "content_type": c.content_type,
+            "content_url": c.content_url,
+            "skill_name": c.skill_name,
+            "difficulty": c.difficulty,
+            "trainer_id": c.trainer_id,
+            "trainer_name": c.trainer.name if c.trainer else "Unknown",
+            "trainer_email": c.trainer.email if c.trainer else "Unknown",
+            "created_at": c.created_at,
+            "status": c.status,
+            "is_approved": c.is_approved
+        }
+        for c in content
+    ]
+
+
+@app.get("/api/admin/content/all")
+def get_all_content(db: Session = Depends(get_db)):
+    """Admin gets all content with status"""
+    content = db.query(models.TrainerContent).order_by(
+        models.TrainerContent.created_at.desc()
+    ).all()
+    
+    return [
+        {
+            "id": c.id,
+            "title": c.title,
+            "description": c.description,
+            "content_type": c.content_type,
+            "content_url": c.content_url,
+            "skill_name": c.skill_name,
+            "difficulty": c.difficulty,
+            "is_approved": c.is_approved,
+            "status": c.status,
+            "admin_notes": c.admin_notes,
+            "trainer_id": c.trainer_id,
+            "trainer_name": c.trainer.name if c.trainer else "Unknown",
+            "created_at": c.created_at,
+            "approved_at": c.approved_at,
+            "rejected_at": c.rejected_at
+        }
+        for c in content
+    ]
+
+
+@app.put("/api/admin/content/{content_id}/approve")
+def approve_content(content_id: int, approval_data: dict = None, db: Session = Depends(get_db)):
+    """Admin approves content"""
+    content = db.query(models.TrainerContent).filter(
+        models.TrainerContent.id == content_id
+    ).first()
+    
+    if not content:
+        raise HTTPException(status_code=404, detail="Content not found")
+    
+    content.is_approved = True
+    content.status = "approved"
+    content.approved_at = datetime.now(timezone.utc)
+    content.rejected_at = None
+    
+    if approval_data and approval_data.get('admin_notes'):
+        content.admin_notes = approval_data.get('admin_notes')
+    
+    db.commit()
+    db.refresh(content)
+    
+    return {
+        "message": "Content approved successfully",
+        "id": content.id,
+        "status": content.status,
+        "is_approved": content.is_approved
+    }
+
+
+@app.put("/api/admin/content/{content_id}/reject")
+def reject_content(content_id: int, reject_data: dict, db: Session = Depends(get_db)):
+    """Admin rejects content with reason"""
+    content = db.query(models.TrainerContent).filter(
+        models.TrainerContent.id == content_id
+    ).first()
+    
+    if not content:
+        raise HTTPException(status_code=404, detail="Content not found")
+    
+    content.is_approved = False
+    content.status = "rejected"
+    content.rejected_at = datetime.now(timezone.utc)
+    content.approved_at = None
+    content.admin_notes = reject_data.get('admin_notes', 'No reason provided')
+    
+    db.commit()
+    db.refresh(content)
+    
+    return {
+        "message": "Content rejected",
+        "id": content.id,
+        "status": content.status,
+        "admin_notes": content.admin_notes
+    }
+
+
+@app.get("/api/trainer/content/{trainer_id}")
+def get_trainer_content_with_status(trainer_id: int, db: Session = Depends(get_db)):
+    """Trainer gets their content with approval status"""
+    content = db.query(models.TrainerContent).filter(
+        models.TrainerContent.trainer_id == trainer_id
+    ).order_by(models.TrainerContent.created_at.desc()).all()
+    
+    return [
+        {
+            "id": c.id,
+            "title": c.title,
+            "description": c.description,
+            "content_type": c.content_type,
+            "content_url": c.content_url,
+            "skill_name": c.skill_name,
+            "difficulty": c.difficulty,
+            "is_approved": c.is_approved,
+            "status": c.status,
+            "admin_notes": c.admin_notes,
+            "created_at": c.created_at,
+            "approved_at": c.approved_at,
+            "rejected_at": c.rejected_at
+        }
+        for c in content
+    ]
+
+
+# ====== COURSE APPROVAL ENDPOINTS ======
+
+@app.post("/api/trainer/course")
+def create_course(course_data: dict, db: Session = Depends(get_db)):
+    """Trainer creates a course (pending approval)"""
+    trainer_id = course_data.get('trainer_id')
+    title = course_data.get('title')
+    description = course_data.get('description')
+    category = course_data.get('category')
+    level = course_data.get('level')
+    duration_minutes = course_data.get('duration_minutes', 60)
+    max_students = course_data.get('max_students', 10)
+    price = course_data.get('price', 0)
+    meeting_link = course_data.get('meeting_link')
+    
+    if not trainer_id or not title:
+        raise HTTPException(status_code=400, detail="trainer_id and title are required")
+    
+    trainer = db.query(models.Trainer).filter(models.Trainer.id == trainer_id).first()
+    if not trainer:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    
+    if not trainer.is_approved:
+        raise HTTPException(status_code=403, detail="Your account is not approved. Please wait for admin approval.")
+    
+    new_course = models.Course(
+        trainer_id=trainer_id,
+        title=title,
+        description=description,
+        category=category,
+        level=level,
+        duration_minutes=int(duration_minutes) if duration_minutes else 60,
+        max_students=int(max_students) if max_students else 10,
+        price=float(price) if price else 0,
+        meeting_link=meeting_link,
+        status="pending",
+        is_approved=False
+    )
+    
+    db.add(new_course)
+    db.commit()
+    db.refresh(new_course)
+    
+    return {
+        "message": "Course created successfully. Waiting for admin approval.",
+        "id": new_course.id,
+        "status": new_course.status,
+        "is_approved": new_course.is_approved
+    }
+
+
+@app.get("/api/trainer/courses/{trainer_id}")
+def get_trainer_courses(trainer_id: int, db: Session = Depends(get_db)):
+    """Get all courses for a trainer with approval status"""
+    courses = db.query(models.Course).filter(
+        models.Course.trainer_id == trainer_id
+    ).order_by(models.Course.created_at.desc()).all()
+    
+    return [
+        {
+            "id": c.id,
+            "title": c.title,
+            "description": c.description,
+            "category": c.category,
+            "level": c.level,
+            "duration_minutes": c.duration_minutes,
+            "max_students": c.max_students,
+            "price": c.price,
+            "meeting_link": c.meeting_link,
+            "status": c.status,
+            "is_approved": c.is_approved,
+            "admin_notes": c.admin_notes,
+            "enrolled_count": db.query(models.CourseEnrollment).filter(
+                models.CourseEnrollment.course_id == c.id
+            ).count(),
+            "created_at": c.created_at,
+            "approved_at": c.approved_at,
+            "rejected_at": c.rejected_at
+        }
+        for c in courses
+    ]
+
+
+@app.get("/api/admin/courses/pending")
+def get_pending_courses(db: Session = Depends(get_db)):
+    """Admin gets pending courses for approval"""
+    courses = db.query(models.Course).filter(
+        models.Course.is_approved == False,
+        models.Course.status == "pending"
+    ).order_by(models.Course.created_at.desc()).all()
+    
+    return [
+        {
+            "id": c.id,
+            "title": c.title,
+            "description": c.description,
+            "category": c.category,
+            "level": c.level,
+            "price": c.price,
+            "duration_minutes": c.duration_minutes,
+            "max_students": c.max_students,
+            "trainer_id": c.trainer_id,
+            "trainer_name": c.trainer.name if c.trainer else "Unknown",
+            "trainer_email": c.trainer.email if c.trainer else "Unknown",
+            "created_at": c.created_at,
+            "status": c.status,
+            "is_approved": c.is_approved
+        }
+        for c in courses
+    ]
+
+
+@app.get("/api/admin/courses/all")
+def get_all_courses(db: Session = Depends(get_db)):
+    """Admin gets all courses with status"""
+    courses = db.query(models.Course).order_by(
+        models.Course.created_at.desc()
+    ).all()
+    
+    return [
+        {
+            "id": c.id,
+            "title": c.title,
+            "description": c.description,
+            "category": c.category,
+            "level": c.level,
+            "duration_minutes": c.duration_minutes,
+            "max_students": c.max_students,
+            "price": c.price,
+            "is_approved": c.is_approved,
+            "status": c.status,
+            "admin_notes": c.admin_notes,
+            "trainer_id": c.trainer_id,
+            "trainer_name": c.trainer.name if c.trainer else "Unknown",
+            "enrolled_count": db.query(models.CourseEnrollment).filter(
+                models.CourseEnrollment.course_id == c.id
+            ).count(),
+            "created_at": c.created_at,
+            "approved_at": c.approved_at,
+            "rejected_at": c.rejected_at
+        }
+        for c in courses
+    ]
+
+
+@app.put("/api/admin/courses/{course_id}/approve")
+def approve_course(course_id: int, approval_data: dict = None, db: Session = Depends(get_db)):
+    """Admin approves a course"""
+    course = db.query(models.Course).filter(models.Course.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    course.is_approved = True
+    course.status = "approved"
+    course.approved_at = datetime.now(timezone.utc)
+    course.rejected_at = None
+    
+    if approval_data and approval_data.get('admin_notes'):
+        course.admin_notes = approval_data.get('admin_notes')
+    
+    db.commit()
+    db.refresh(course)
+    
+    return {
+        "message": "Course approved successfully",
+        "id": course.id,
+        "status": course.status,
+        "is_approved": course.is_approved
+    }
+
+
+@app.put("/api/admin/courses/{course_id}/reject")
+def reject_course(course_id: int, reject_data: dict, db: Session = Depends(get_db)):
+    """Admin rejects a course with reason"""
+    course = db.query(models.Course).filter(models.Course.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    course.is_approved = False
+    course.status = "rejected"
+    course.rejected_at = datetime.now(timezone.utc)
+    course.approved_at = None
+    course.admin_notes = reject_data.get('admin_notes', 'No reason provided')
+    
+    db.commit()
+    db.refresh(course)
+    
+    return {
+        "message": "Course rejected",
+        "id": course.id,
+        "status": course.status,
+        "admin_notes": course.admin_notes
+    }
+
+
+@app.put("/api/trainer/course/{course_id}")
+def update_course(course_id: int, course_data: dict, db: Session = Depends(get_db)):
+    """Trainer updates a course (resets to pending if approved)"""
+    course = db.query(models.Course).filter(models.Course.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    for key in ['title', 'description', 'category', 'level', 'duration_minutes', 'max_students', 'price', 'meeting_link']:
+        if key in course_data and course_data[key] is not None:
+            setattr(course, key, course_data[key])
+    
+    # Reset approval status if course was already approved/rejected
+    if course.status != "pending":
+        course.status = "pending"
+        course.is_approved = False
+        course.approved_at = None
+        course.rejected_at = None
+        course.admin_notes = None
+    
+    db.commit()
+    db.refresh(course)
+    
+    return {
+        "message": "Course updated successfully. Waiting for admin approval.",
+        "id": course.id,
+        "status": course.status
+    }
+
+
+@app.delete("/api/trainer/course/{course_id}")
+def delete_course(course_id: int, db: Session = Depends(get_db)):
+    """Trainer deletes a course"""
+    course = db.query(models.Course).filter(models.Course.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    db.delete(course)
+    db.commit()
+    
+    return {"message": "Course deleted successfully"}
+
+
+@app.post("/api/student/course/enroll")
+def enroll_in_course(enrollment_data: dict, db: Session = Depends(get_db)):
+    """Student enrolls in a course"""
+    student_id = enrollment_data.get('student_id')
+    course_id = enrollment_data.get('course_id')
+    
+    if not student_id or not course_id:
+        raise HTTPException(status_code=400, detail="student_id and course_id are required")
+    
+    course = db.query(models.Course).filter(
+        models.Course.id == course_id,
+        models.Course.is_approved == True
+    ).first()
+    
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found or not approved")
+    
+    existing = db.query(models.CourseEnrollment).filter(
+        models.CourseEnrollment.student_id == student_id,
+        models.CourseEnrollment.course_id == course_id
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="Already enrolled in this course")
+    
+    enrolled_count = db.query(models.CourseEnrollment).filter(
+        models.CourseEnrollment.course_id == course_id
+    ).count()
+    
+    if enrolled_count >= course.max_students:
+        raise HTTPException(status_code=400, detail="Course is full")
+    
+    enrollment = models.CourseEnrollment(
+        student_id=student_id,
+        course_id=course_id,
+        status="enrolled"
+    )
+    
+    db.add(enrollment)
+    db.commit()
+    db.refresh(enrollment)
+    
+    return {
+        "message": "Successfully enrolled in the course",
+        "enrollment_id": enrollment.id,
+        "course_title": course.title
+    }
+
+
+@app.get("/api/student/courses/enrolled/{student_id}")
+def get_enrolled_courses(student_id: int, db: Session = Depends(get_db)):
+    """Get all courses a student is enrolled in"""
+    enrollments = db.query(models.CourseEnrollment).filter(
+        models.CourseEnrollment.student_id == student_id
+    ).all()
+    
+    result = []
+    for e in enrollments:
+        course = db.query(models.Course).filter(models.Course.id == e.course_id).first()
+        if course:
+            result.append({
+                "enrollment_id": e.id,
+                "course_id": course.id,
+                "course_title": course.title,
+                "course_description": course.description,
+                "trainer_name": course.trainer.name if course.trainer else "Unknown",
+                "status": e.status,
+                "progress": e.progress,
+                "attendance_percentage": e.attendance_percentage,
+                "enrolled_at": e.enrolled_at,
+                "completed_at": e.completed_at
+            })
+    
+    return result
+
+
+@app.get("/api/student/courses/available")
+def get_available_courses(db: Session = Depends(get_db)):
+    """Get all approved courses for students"""
+    courses = db.query(models.Course).filter(
+        models.Course.is_approved == True,
+        models.Course.status == "approved"
+    ).order_by(models.Course.created_at.desc()).all()
+    
+    return [
+        {
+            "id": c.id,
+            "title": c.title,
+            "description": c.description,
+            "category": c.category,
+            "level": c.level,
+            "duration_minutes": c.duration_minutes,
+            "max_students": c.max_students,
+            "price": c.price,
+            "trainer_id": c.trainer_id,
+            "trainer_name": c.trainer.name if c.trainer else "Unknown",
+            "enrolled_count": db.query(models.CourseEnrollment).filter(
+                models.CourseEnrollment.course_id == c.id
+            ).count(),
+            "created_at": c.created_at
+        }
+        for c in courses
+    ]
+
+
+@app.put("/api/student/course/progress/{enrollment_id}")
+def update_course_progress(enrollment_id: int, progress_data: dict, db: Session = Depends(get_db)):
+    """Update student's course progress"""
+    enrollment = db.query(models.CourseEnrollment).filter(
+        models.CourseEnrollment.id == enrollment_id
+    ).first()
+    
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    
+    progress = progress_data.get('progress')
+    if progress is not None:
+        enrollment.progress = progress
+        if progress >= 100:
+            enrollment.status = "completed"
+            enrollment.completed_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    db.refresh(enrollment)
+    
+    return {
+        "message": "Progress updated",
+        "progress": enrollment.progress,
+        "status": enrollment.status
+    }
 
 @app.get("/api/health")
 def health_check():

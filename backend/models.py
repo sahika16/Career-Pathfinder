@@ -43,25 +43,20 @@ class Resume(Base):
     uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
     processed_at = Column(DateTime(timezone=True), nullable=True)
 
-    # ====== REFERRAL FIELDS ======
+    # Referral fields
     referral_code = Column(String(50), nullable=True, unique=True)
     referred_by = Column(String(50), nullable=True)  
     referral_count = Column(Integer, default=0)
     referral_earnings = Column(Integer, default=0)  
     
-    # ====== REFERRAL RELATIONSHIP - REMOVED to fix error ======
-    # The relationship was causing: "Could not determine join condition"
-    # We'll handle referral logic directly in the API endpoints
-    
-    # Keep all other relationships
+    # Relationships
     skills = relationship("Skill", back_populates="resume", cascade="all, delete-orphan")
     concept_skills = relationship("ConceptSkill", back_populates="resume", cascade="all, delete-orphan")
     test_results = relationship("TestResult", back_populates="resume", cascade="all, delete-orphan")
     coachings = relationship("PersonalizedCoaching", back_populates="student", cascade="all, delete-orphan")
-    
-    # Enrollment relationships
     enrollments = relationship("Enrollment", foreign_keys="Enrollment.student_id", back_populates="student", cascade="all, delete-orphan")
     attendances = relationship("Attendance", foreign_keys="Attendance.student_id", back_populates="student", cascade="all, delete-orphan")
+    course_enrollments = relationship("CourseEnrollment", foreign_keys="CourseEnrollment.student_id", back_populates="student", cascade="all, delete-orphan")
 
 # ====== Trainer Table ======
 class Trainer(Base):
@@ -99,8 +94,7 @@ class Trainer(Base):
     contents = relationship("TrainerContent", back_populates="trainer", cascade="all, delete-orphan")
     sessions = relationship("TrainerSession", back_populates="trainer", cascade="all, delete-orphan")
     coachings = relationship("PersonalizedCoaching", back_populates="trainer", cascade="all, delete-orphan")
-    
-    # Attendance relationships
+    courses = relationship("Course", back_populates="trainer", cascade="all, delete-orphan")
     attendances_marked = relationship("Attendance", foreign_keys="Attendance.marked_by", back_populates="trainer")
 
 # ====== Skill Models ======
@@ -174,7 +168,7 @@ class TestSummary(Base):
     
     resume = relationship("Resume")
 
-# ====== Trainer Content Model ======
+# ====== Trainer Content Model with Approval ======
 class TrainerContent(Base):
     __tablename__ = "trainer_contents"
     
@@ -186,6 +180,12 @@ class TrainerContent(Base):
     content_url = Column(Text, nullable=True)
     skill_name = Column(String(100), nullable=True)
     difficulty = Column(String(20), nullable=True)
+    # Approval fields
+    is_approved = Column(Boolean, default=False)
+    status = Column(String(50), default="pending")  # pending, approved, rejected
+    admin_notes = Column(Text, nullable=True)
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+    rejected_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
@@ -214,10 +214,51 @@ class TrainerSession(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     trainer = relationship("Trainer", back_populates="sessions")
-    
-    # Enrollment relationships
     enrollments = relationship("Enrollment", foreign_keys="Enrollment.session_id", back_populates="session", cascade="all, delete-orphan")
     attendances = relationship("Attendance", foreign_keys="Attendance.session_id", back_populates="session", cascade="all, delete-orphan")
+
+# ====== Course Model with Approval ======
+class Course(Base):
+    __tablename__ = "courses"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    trainer_id = Column(Integer, ForeignKey("trainers.id"))
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String(100), nullable=True)
+    level = Column(String(50), nullable=True)  # Beginner, Intermediate, Advanced
+    duration_minutes = Column(Integer, default=60)
+    max_students = Column(Integer, default=10)
+    price = Column(DECIMAL(10,2), default=0)
+    meeting_link = Column(Text, nullable=True)
+    # Approval fields
+    is_approved = Column(Boolean, default=False)
+    status = Column(String(50), default="pending")  # pending, approved, rejected
+    admin_notes = Column(Text, nullable=True)
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+    rejected_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    trainer = relationship("Trainer", back_populates="courses")
+    enrollments = relationship("CourseEnrollment", back_populates="course", cascade="all, delete-orphan")
+
+# ====== Course Enrollment Model ======
+class CourseEnrollment(Base):
+    __tablename__ = "course_enrollments"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("resumes.id"))
+    course_id = Column(Integer, ForeignKey("courses.id"))
+    status = Column(String(50), default="enrolled")  # enrolled, in_progress, completed
+    progress = Column(Integer, default=0)
+    attendance_percentage = Column(Integer, default=0)
+    enrolled_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    student = relationship("Resume", foreign_keys=[student_id], back_populates="course_enrollments")
+    course = relationship("Course", back_populates="enrollments")
 
 # ====== Personalized Coaching Model ======
 class PersonalizedCoaching(Base):
@@ -241,20 +282,18 @@ class PersonalizedCoaching(Base):
     trainer = relationship("Trainer", back_populates="coachings")
     student = relationship("Resume", back_populates="coachings")
 
-# ====== ENROLLMENT AND ATTENDANCE MODELS ======
-
+# ====== Enrollment and Attendance Models ======
 class Enrollment(Base):
     __tablename__ = "enrollments"
     
     id = Column(Integer, primary_key=True, index=True)
     student_id = Column(Integer, ForeignKey("resumes.id"), nullable=False)
     session_id = Column(Integer, ForeignKey("trainer_sessions.id"), nullable=False)
-    status = Column(String(50), default="enrolled")  # enrolled, completed, dropped
-    progress = Column(Integer, default=0)  # 0-100
+    status = Column(String(50), default="enrolled")
+    progress = Column(Integer, default=0)
     enrolled_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    # Relationships
     student = relationship("Resume", foreign_keys=[student_id], back_populates="enrollments")
     session = relationship("TrainerSession", foreign_keys=[session_id], back_populates="enrollments")
 
@@ -265,12 +304,11 @@ class Attendance(Base):
     student_id = Column(Integer, ForeignKey("resumes.id"), nullable=False)
     session_id = Column(Integer, ForeignKey("trainer_sessions.id"), nullable=False)
     date = Column(DateTime(timezone=True), server_default=func.now())
-    status = Column(String(20), default="present")  # present, absent, late
+    status = Column(String(20), default="present")
     marked_by = Column(Integer, ForeignKey("trainers.id"), nullable=True)
     notes = Column(Text, nullable=True)
     marked_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    # Relationships
     student = relationship("Resume", foreign_keys=[student_id], back_populates="attendances")
     session = relationship("TrainerSession", foreign_keys=[session_id], back_populates="attendances")
     trainer = relationship("Trainer", foreign_keys=[marked_by], back_populates="attendances_marked")

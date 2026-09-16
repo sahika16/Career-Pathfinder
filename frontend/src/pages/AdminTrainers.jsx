@@ -5,6 +5,8 @@ import API_BASE_URL from '../config'
 
 function AdminTrainers({ user, onLogout }) {
   const navigate = useNavigate()
+  
+  // Trainer states
   const [trainers, setTrainers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -16,18 +18,26 @@ function AdminTrainers({ user, onLogout }) {
   const [trainerSessions, setTrainerSessions] = useState([])
   const [loadingContent, setLoadingContent] = useState(false)
   const [activeTab, setActiveTab] = useState('details')
+  
+  // Approval states
+  const [pendingContent, setPendingContent] = useState([])
+  const [pendingCourses, setPendingCourses] = useState([])
+  const [allContent, setAllContent] = useState([])
+  const [allCourses, setAllCourses] = useState([])
+  const [approvalTab, setApprovalTab] = useState('trainers')
+  
   const [stats, setStats] = useState({
-    total: 0,
+    trainers: 0,
     approved: 0,
     pending: 0,
-    members: 0,
-    trainers: 0,
     regular: 0,
-    personalized: 0
+    personalized: 0,
+    pendingContent: 0,
+    pendingCourses: 0
   })
 
   useEffect(() => {
-    fetchTrainers()
+    fetchAllData()
   }, [])
 
   useEffect(() => {
@@ -47,44 +57,103 @@ function AdminTrainers({ user, onLogout }) {
     }
   }, [searchTerm, trainers])
 
-  const fetchTrainers = async () => {
+  const fetchAllData = async () => {
     try {
       setLoading(true)
       setError(null)
       
-      const response = await fetch(`${API_BASE_URL}/admin/trainers`)
+      await Promise.all([
+        fetchTrainers(),
+        fetchPendingContent(),
+        fetchPendingCourses(),
+        fetchAllContent(),
+        fetchAllCourses()
+      ])
       
-      if (!response.ok) {
-        throw new Error('Failed to fetch trainers')
-      }
+    } catch (err) {
+      setError('Failed to load data. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchTrainers = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/trainers`)
+      if (!response.ok) throw new Error('Failed to fetch trainers')
       
       const data = await response.json()
-      
       setTrainers(data)
       setFilteredTrainers(data)
       
-      const total = data.length
-      const approved = data.filter(t => t.is_approved === true).length
-      const pending = data.filter(t => t.is_approved === false && t.status === 'pending_approval').length
-      const members = data.filter(t => t.role === 'member').length
-      const trainersOnly = data.filter(t => t.role === 'trainer').length
-      const regular = data.filter(t => t.category === 'regular').length
-      const personalized = data.filter(t => t.category === 'personalized').length
+      const trainersOnly = data.filter(t => t.role === 'trainer')
+      const totalTrainers = trainersOnly.length
+      const approved = trainersOnly.filter(t => t.is_approved === true).length
+      const pending = trainersOnly.filter(t => t.is_approved === false && t.status === 'pending_approval').length
+      const regular = trainersOnly.filter(t => t.category === 'regular').length
+      const personalized = trainersOnly.filter(t => t.category === 'personalized').length
       
-      setStats({ 
-        total, 
+      setStats(prev => ({ 
+        ...prev,
+        trainers: totalTrainers,
         approved, 
         pending, 
-        members, 
-        trainers: trainersOnly, 
         regular, 
         personalized 
-      })
+      }))
       
     } catch (err) {
-      setError('Failed to load trainers data. Please try again.')
-    } finally {
-      setLoading(false)
+      console.error('Error fetching trainers:', err)
+    }
+  }
+
+  const fetchPendingContent = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/content/pending`)
+      if (response.ok) {
+        const data = await response.json()
+        setPendingContent(data)
+        setStats(prev => ({ ...prev, pendingContent: data.length }))
+      }
+    } catch (err) {
+      console.error('Error fetching pending content:', err)
+    }
+  }
+
+  const fetchPendingCourses = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/courses/pending`)
+      if (response.ok) {
+        const data = await response.json()
+        setPendingCourses(data)
+        setStats(prev => ({ ...prev, pendingCourses: data.length }))
+      }
+    } catch (err) {
+      console.error('Error fetching pending courses:', err)
+    }
+  }
+
+  const fetchAllContent = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/content/all`)
+      if (response.ok) {
+        const data = await response.json()
+        setAllContent(data)
+      }
+    } catch (err) {
+      console.error('Error fetching all content:', err)
+    }
+  }
+
+  const fetchAllCourses = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/courses/all`)
+      if (response.ok) {
+        const data = await response.json()
+        setAllCourses(data)
+      }
+    } catch (err) {
+      console.error('Error fetching all courses:', err)
     }
   }
 
@@ -128,14 +197,10 @@ function AdminTrainers({ user, onLogout }) {
     try {
       const response = await fetch(`${API_BASE_URL}/admin/approve-trainer/${trainerId}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        headers: { 'Content-Type': 'application/json' }
       })
       
-      if (!response.ok) {
-        throw new Error('Failed to approve trainer')
-      }
+      if (!response.ok) throw new Error('Failed to approve trainer')
       
       await response.json()
       fetchTrainers()
@@ -150,19 +215,97 @@ function AdminTrainers({ user, onLogout }) {
     try {
       const response = await fetch(`${API_BASE_URL}/admin/reject-trainer/${trainerId}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        headers: { 'Content-Type': 'application/json' }
       })
       
-      if (!response.ok) {
-        throw new Error('Failed to reject trainer')
-      }
+      if (!response.ok) throw new Error('Failed to reject trainer')
       
       await response.json()
       fetchTrainers()
     } catch (err) {
       setError('Failed to reject trainer. Please try again.')
+    }
+  }
+
+  // ✅ Content approval - direct approve, no modal
+  const handleApproveContent = async (contentId) => {
+    if (!window.confirm('Approve this content?')) return
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/content/${contentId}/approve`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      
+      if (!response.ok) throw new Error('Failed to approve content')
+      
+      await response.json()
+      fetchPendingContent()
+      fetchAllContent()
+    } catch (err) {
+      setError('Failed to approve content. Please try again.')
+    }
+  }
+
+  const handleRejectContent = async (contentId) => {
+    const reason = prompt('Please provide a reason for rejection:')
+    if (reason === null) return
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/content/${contentId}/reject`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_notes: reason })
+      })
+      
+      if (!response.ok) throw new Error('Failed to reject content')
+      
+      await response.json()
+      fetchPendingContent()
+      fetchAllContent()
+    } catch (err) {
+      setError('Failed to reject content. Please try again.')
+    }
+  }
+
+  // ✅ Course approval - direct approve, no modal
+  const handleApproveCourse = async (courseId) => {
+    if (!window.confirm('Approve this course?')) return
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/courses/${courseId}/approve`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      
+      if (!response.ok) throw new Error('Failed to approve course')
+      
+      await response.json()
+      fetchPendingCourses()
+      fetchAllCourses()
+    } catch (err) {
+      setError('Failed to approve course. Please try again.')
+    }
+  }
+
+  const handleRejectCourse = async (courseId) => {
+    const reason = prompt('Please provide a reason for rejection:')
+    if (reason === null) return
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/courses/${courseId}/reject`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_notes: reason })
+      })
+      
+      if (!response.ok) throw new Error('Failed to reject course')
+      
+      await response.json()
+      fetchPendingCourses()
+      fetchAllCourses()
+    } catch (err) {
+      setError('Failed to reject course. Please try again.')
     }
   }
 
@@ -205,6 +348,15 @@ function AdminTrainers({ user, onLogout }) {
     }
   }
 
+  const getStatusBadge = (status) => {
+    const styles = {
+      'pending': 'bg-yellow-100 text-yellow-700',
+      'approved': 'bg-green-100 text-green-700',
+      'rejected': 'bg-red-100 text-red-700'
+    }
+    return styles[status] || 'bg-gray-100 text-gray-600'
+  }
+
   const getActionButton = (trainer) => {
     if (trainer.is_approved) {
       return <span className="text-xs font-medium text-green-600 bg-green-50 px-3 py-1 rounded-full">Approved</span>
@@ -237,7 +389,7 @@ function AdminTrainers({ user, onLogout }) {
         <div className="flex items-center justify-center h-screen">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading trainers...</p>
+            <p className="mt-4 text-gray-600">Loading...</p>
           </div>
         </div>
       </div>
@@ -251,8 +403,8 @@ function AdminTrainers({ user, onLogout }) {
       <div className="max-w-7xl mx-auto pt-28 px-6 pb-12">
         <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Trainer Management</h1>
-            <p className="text-gray-500">View and manage all trainers and members</p>
+            <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+            <p className="text-gray-500">Manage trainers, content, and courses</p>
           </div>
           <button
             onClick={handleBack}
@@ -261,125 +413,408 @@ function AdminTrainers({ user, onLogout }) {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
-            Back to Dashboard
+            Back
           </button>
         </div>
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-6">
             {error}
-            <button onClick={fetchTrainers} className="ml-3 text-blue-600 hover:underline">
-              Retry
+            <button onClick={() => setError(null)} className="ml-3 text-blue-600 hover:underline">
+              Dismiss
             </button>
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
-            <p className="text-sm text-gray-500">Total</p>
-            <p className="text-2xl font-bold text-blue-600">{stats.total}</p>
+            <p className="text-sm text-gray-500">Total Trainers</p>
+            <p className="text-2xl font-bold text-purple-600">{stats.trainers}</p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
             <p className="text-sm text-gray-500">Approved</p>
             <p className="text-2xl font-bold text-green-600">{stats.approved}</p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
-            <p className="text-sm text-gray-500">Pending</p>
+            <p className="text-sm text-gray-500">Pending Trainers</p>
             <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
-            <p className="text-sm text-gray-500">Members</p>
-            <p className="text-2xl font-bold text-blue-600">{stats.members}</p>
+          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200 cursor-pointer hover:shadow-md transition"
+               onClick={() => setApprovalTab('content')}>
+            <p className="text-sm text-gray-500">Pending Content</p>
+            <p className="text-2xl font-bold text-orange-600">{stats.pendingContent}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
-            <p className="text-sm text-gray-500">Trainers</p>
-            <p className="text-2xl font-bold text-purple-600">{stats.trainers}</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
-            <p className="text-sm text-gray-500">Regular Trainers</p>
-            <p className="text-2xl font-bold text-green-600">{stats.regular}</p>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
-            <p className="text-sm text-gray-500">Personalized Trainers</p>
-            <p className="text-2xl font-bold text-pink-600">{stats.personalized}</p>
+          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200 cursor-pointer hover:shadow-md transition"
+               onClick={() => setApprovalTab('courses')}>
+            <p className="text-sm text-gray-500">Pending Courses</p>
+            <p className="text-2xl font-bold text-red-600">{stats.pendingCourses}</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
-          <div className="flex flex-wrap items-center gap-4">
-            <label className="font-medium text-gray-700">Search:</label>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by name, email, phone, ID, role, category, or specialty..."
-              className="flex-1 min-w-[200px] px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <span className="text-sm text-gray-500">
-              {filteredTrainers.length} trainers found
-            </span>
-          </div>
+        {/* Tab Navigation */}
+        <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200">
+          <button
+            onClick={() => setApprovalTab('trainers')}
+            className={`px-4 py-2.5 text-sm font-medium transition border-b-2 ${
+              approvalTab === 'trainers' 
+                ? 'border-blue-600 text-blue-600' 
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            👨‍🏫 Trainers
+          </button>
+          <button
+            onClick={() => setApprovalTab('content')}
+            className={`px-4 py-2.5 text-sm font-medium transition border-b-2 ${
+              approvalTab === 'content' 
+                ? 'border-blue-600 text-blue-600' 
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            📄 Content {pendingContent.length > 0 && (
+              <span className="ml-1 px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full text-xs">
+                {pendingContent.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setApprovalTab('courses')}
+            className={`px-4 py-2.5 text-sm font-medium transition border-b-2 ${
+              approvalTab === 'courses' 
+                ? 'border-blue-600 text-blue-600' 
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            📚 Courses {pendingCourses.length > 0 && (
+              <span className="ml-1 px-2 py-0.5 bg-red-100 text-red-600 rounded-full text-xs">
+                {pendingCourses.length}
+              </span>
+            )}
+          </button>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            {filteredTrainers.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-gray-500">No trainers found.</p>
-                <p className="text-sm text-gray-400 mt-1">Trainers will appear here after registration.</p>
+        {/* TAB: TRAINERS */}
+        {approvalTab === 'trainers' && (
+          <>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+              <div className="flex flex-wrap items-center gap-4">
+                <label className="font-medium text-gray-700">Search:</label>
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search by name, email, phone, ID, role, category, or specialty..."
+                  className="flex-1 min-w-[200px] px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-500">
+                  {filteredTrainers.length} records found
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                {filteredTrainers.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-gray-500">No trainers found.</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-left">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-4 py-3 text-sm font-medium text-gray-600">ID</th>
+                        <th className="px-4 py-3 text-sm font-medium text-gray-600">Name</th>
+                        <th className="px-4 py-3 text-sm font-medium text-gray-600">Email</th>
+                        <th className="px-4 py-3 text-sm font-medium text-gray-600">Phone</th>
+                        <th className="px-4 py-3 text-sm font-medium text-gray-600">Role</th>
+                        <th className="px-4 py-3 text-sm font-medium text-gray-600">Category</th>
+                        <th className="px-4 py-3 text-sm font-medium text-gray-600">Specialty</th>
+                        <th className="px-4 py-3 text-sm font-medium text-gray-600">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredTrainers.map((trainer) => (
+                        <tr key={trainer.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
+                          <td className="px-4 py-3 text-sm font-mono text-blue-600">#{trainer.id}</td>
+                          <td 
+                            className="px-4 py-3 text-sm font-medium text-blue-600 cursor-pointer hover:text-blue-800 hover:underline"
+                            onClick={() => handleNameClick(trainer)}
+                          >
+                            {trainer.name || 'N/A'}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600 break-all">{trainer.email || 'N/A'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{trainer.phone || 'N/A'}</td>
+                          <td className="px-4 py-3 text-sm">{getRoleBadge(trainer.role)}</td>
+                          <td className="px-4 py-3 text-sm">{getCategoryBadge(trainer.category)}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
+                              {trainer.specialty || 'N/A'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm">{getActionButton(trainer)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* TAB: CONTENT */}
+        {approvalTab === 'content' && (
+          <div>
+            {pendingContent.length > 0 && (
+              <div className="mb-8">
+                <h2 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                  ⏳ Pending Approval
+                  <span className="px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full text-xs">
+                    {pendingContent.length}
+                  </span>
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {pendingContent.map((item) => (
+                    <div key={item.id} className="bg-white rounded-xl shadow-sm border border-orange-200 hover:shadow-md transition overflow-hidden">
+                      <div className="p-4">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-800">{item.title}</h3>
+                            <p className="text-sm text-gray-500">By: {item.trainer_name}</p>
+                          </div>
+                          <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
+                            Pending
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                            {item.content_type}
+                          </span>
+                          {item.difficulty && (
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              item.difficulty === 'Beginner' ? 'bg-green-100 text-green-700' :
+                              item.difficulty === 'Intermediate' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {item.difficulty}
+                            </span>
+                          )}
+                          {item.skill_name && (
+                            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                              {item.skill_name}
+                            </span>
+                          )}
+                        </div>
+                        {item.description && (
+                          <p className="text-sm text-gray-600 mt-2 line-clamp-2">{item.description}</p>
+                        )}
+                        <p className="text-xs text-gray-400 mt-2">
+                          {item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}
+                        </p>
+                        <div className="flex gap-2 mt-3">
+                          <button
+                            onClick={() => handleApproveContent(item.id)}
+                            className="flex-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => handleRejectContent(item.id)}
+                            className="flex-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <h2 className="text-lg font-semibold text-gray-800 mb-3">📄 All Content</h2>
+            {allContent.length === 0 ? (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+                <p className="text-gray-500">No content uploaded yet.</p>
               </div>
             ) : (
-              <table className="w-full text-left">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-3 text-sm font-medium text-gray-600">ID</th>
-                    <th className="px-4 py-3 text-sm font-medium text-gray-600">Name</th>
-                    <th className="px-4 py-3 text-sm font-medium text-gray-600">Email</th>
-                    <th className="px-4 py-3 text-sm font-medium text-gray-600">Phone</th>
-                    <th className="px-4 py-3 text-sm font-medium text-gray-600">Role</th>
-                    <th className="px-4 py-3 text-sm font-medium text-gray-600">Category</th>
-                    <th className="px-4 py-3 text-sm font-medium text-gray-600">Specialty</th>
-                    <th className="px-4 py-3 text-sm font-medium text-gray-600">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTrainers.map((trainer) => (
-                    <tr key={trainer.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
-                      <td className="px-4 py-3 text-sm font-mono text-blue-600">#{trainer.id}</td>
-                      <td 
-                        className="px-4 py-3 text-sm font-medium text-blue-600 cursor-pointer hover:text-blue-800 hover:underline"
-                        onClick={() => handleNameClick(trainer)}
-                      >
-                        {trainer.name || 'N/A'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 break-all">{trainer.email || 'N/A'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{trainer.phone || 'N/A'}</td>
-                      <td className="px-4 py-3 text-sm">
-                        {getRoleBadge(trainer.role)}
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        {getCategoryBadge(trainer.category)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
-                          {trainer.specialty || 'N/A'}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {allContent.map((item) => (
+                  <div key={item.id} className={`bg-white rounded-xl shadow-sm border ${
+                    item.status === 'approved' ? 'border-green-200' :
+                    item.status === 'rejected' ? 'border-red-200' :
+                    'border-yellow-200'
+                  } hover:shadow-md transition overflow-hidden`}>
+                    <div className="p-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-800">{item.title}</h3>
+                          <p className="text-sm text-gray-500">By: {item.trainer_name}</p>
+                        </div>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusBadge(item.status)}`}>
+                          {item.status ? item.status.charAt(0).toUpperCase() + item.status.slice(1) : 'N/A'}
                         </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        {getActionButton(trainer)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                          {item.content_type}
+                        </span>
+                        {item.difficulty && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            item.difficulty === 'Beginner' ? 'bg-green-100 text-green-700' :
+                            item.difficulty === 'Intermediate' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {item.difficulty}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-2">
+                        {item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
-        </div>
+        )}
+
+        {/* TAB: COURSES */}
+        {approvalTab === 'courses' && (
+          <div>
+            {pendingCourses.length > 0 && (
+              <div className="mb-8">
+                <h2 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                  ⏳ Pending Approval
+                  <span className="px-2 py-0.5 bg-red-100 text-red-600 rounded-full text-xs">
+                    {pendingCourses.length}
+                  </span>
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {pendingCourses.map((course) => (
+                    <div key={course.id} className="bg-white rounded-xl shadow-sm border border-red-200 hover:shadow-md transition overflow-hidden">
+                      <div className="p-4">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-800">{course.title}</h3>
+                            <p className="text-sm text-gray-500">By: {course.trainer_name}</p>
+                          </div>
+                          <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
+                            Pending
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {course.level && (
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              course.level === 'Beginner' ? 'bg-green-100 text-green-700' :
+                              course.level === 'Intermediate' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {course.level}
+                            </span>
+                          )}
+                          {course.category && (
+                            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                              {course.category}
+                            </span>
+                          )}
+                          {course.price > 0 ? (
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                              ₹{course.price}
+                            </span>
+                          ) : (
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                              Free
+                            </span>
+                          )}
+                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                            ⏱️ {course.duration_minutes} min
+                          </span>
+                        </div>
+                        {course.description && (
+                          <p className="text-sm text-gray-600 mt-2 line-clamp-2">{course.description}</p>
+                        )}
+                        <p className="text-xs text-gray-400 mt-2">
+                          {course.created_at ? new Date(course.created_at).toLocaleDateString() : ''}
+                        </p>
+                        <div className="flex gap-2 mt-3">
+                          <button
+                            onClick={() => handleApproveCourse(course.id)}
+                            className="flex-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => handleRejectCourse(course.id)}
+                            className="flex-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <h2 className="text-lg font-semibold text-gray-800 mb-3">📚 All Courses</h2>
+            {allCourses.length === 0 ? (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+                <p className="text-gray-500">No courses created yet.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {allCourses.map((course) => (
+                  <div key={course.id} className={`bg-white rounded-xl shadow-sm border ${
+                    course.status === 'approved' ? 'border-green-200' :
+                    course.status === 'rejected' ? 'border-red-200' :
+                    'border-yellow-200'
+                  } hover:shadow-md transition overflow-hidden`}>
+                    <div className="p-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-800">{course.title}</h3>
+                          <p className="text-sm text-gray-500">By: {course.trainer_name}</p>
+                        </div>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusBadge(course.status)}`}>
+                          {course.status ? course.status.charAt(0).toUpperCase() + course.status.slice(1) : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {course.level && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            course.level === 'Beginner' ? 'bg-green-100 text-green-700' :
+                            course.level === 'Intermediate' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {course.level}
+                          </span>
+                        )}
+                        {course.category && (
+                          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                            {course.category}
+                          </span>
+                        )}
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                          👥 {course.enrolled_count || 0}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-2">
+                        {course.created_at ? new Date(course.created_at).toLocaleDateString() : ''}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
+      {/* Trainer Detail Modal */}
       {showDetails && selectedTrainer && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -387,12 +822,7 @@ function AdminTrainers({ user, onLogout }) {
               <h2 className="text-xl font-bold text-gray-900">
                 Trainer Details - {selectedTrainer.name}
               </h2>
-              <button
-                onClick={closeDetails}
-                className="text-gray-400 hover:text-gray-600 text-2xl"
-              >
-                ×
-              </button>
+              <button onClick={closeDetails} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
             </div>
 
             <div className="p-6">
@@ -400,9 +830,7 @@ function AdminTrainers({ user, onLogout }) {
                 <button
                   onClick={() => setActiveTab('details')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                    activeTab === 'details' 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    activeTab === 'details' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
                   Profile
@@ -410,9 +838,7 @@ function AdminTrainers({ user, onLogout }) {
                 <button
                   onClick={() => setActiveTab('content')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                    activeTab === 'content' 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    activeTab === 'content' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
                   Content ({trainerContent.length})
@@ -420,9 +846,7 @@ function AdminTrainers({ user, onLogout }) {
                 <button
                   onClick={() => setActiveTab('sessions')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                    activeTab === 'sessions' 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    activeTab === 'sessions' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
                   Sessions ({trainerSessions.length})
@@ -487,12 +911,6 @@ function AdminTrainers({ user, onLogout }) {
                       )}
                     </div>
                   </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Registered On</label>
-                    <p className="text-lg text-gray-900">
-                      {selectedTrainer.created_at ? new Date(selectedTrainer.created_at).toLocaleDateString() : 'N/A'}
-                    </p>
-                  </div>
                 </div>
               )}
 
@@ -516,15 +934,9 @@ function AdminTrainers({ user, onLogout }) {
                               <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
                                 {content.content_type}
                               </span>
-                              {content.difficulty && (
-                                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                  content.difficulty === 'Beginner' ? 'bg-green-100 text-green-700' :
-                                  content.difficulty === 'Intermediate' ? 'bg-yellow-100 text-yellow-700' :
-                                  'bg-red-100 text-red-700'
-                                }`}>
-                                  {content.difficulty}
-                                </span>
-                              )}
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusBadge(content.status)}`}>
+                                {content.status || 'pending'}
+                              </span>
                             </div>
                             <span className="text-xs text-gray-400">
                               {content.created_at ? new Date(content.created_at).toLocaleDateString() : ''}
@@ -532,9 +944,6 @@ function AdminTrainers({ user, onLogout }) {
                           </div>
                           <h4 className="font-semibold text-gray-800 text-sm mt-2">{content.title}</h4>
                           <p className="text-xs text-gray-500 mt-1 line-clamp-2">{content.description}</p>
-                          {content.skill_name && (
-                            <p className="text-xs text-purple-600 mt-1">Skill: {content.skill_name}</p>
-                          )}
                           {content.content_url && (
                             <a 
                               href={content.content_url} 
@@ -579,33 +988,12 @@ function AdminTrainers({ user, onLogout }) {
                                 }`}>
                                   {session.status}
                                 </span>
-                                {session.level && (
-                                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
-                                    {session.level}
-                                  </span>
-                                )}
                               </div>
-                              <p className="text-xs text-gray-500 mt-1">{session.description}</p>
                               <div className="flex flex-wrap gap-4 mt-2 text-xs text-gray-600">
                                 <span>📅 {session.session_date ? new Date(session.session_date).toLocaleDateString() : 'N/A'}</span>
                                 <span>⏱️ {session.duration_minutes || 0} min</span>
-                                <span>👥 {session.enrolled_count || 0}/{session.max_students || 0} students</span>
-                                {session.price > 0 && <span>💰 ₹{session.price}</span>}
-                                {session.category && <span>📂 {session.category}</span>}
+                                <span>👥 {session.enrolled_count || 0}/{session.max_students || 0}</span>
                               </div>
-                              {session.meeting_link && (
-                                <a 
-                                  href={session.meeting_link} 
-                                  target="_blank" 
-                                  rel="noopener" 
-                                  className="text-blue-600 hover:underline text-xs mt-1 inline-block"
-                                >
-                                  Join Meeting →
-                                </a>
-                              )}
-                            </div>
-                            <div className="text-xs text-gray-400">
-                              Created: {session.created_at ? new Date(session.created_at).toLocaleDateString() : ''}
                             </div>
                           </div>
                         </div>
