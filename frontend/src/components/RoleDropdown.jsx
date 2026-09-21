@@ -37,18 +37,31 @@ function RoleDropdown() {
             <p className="text-white text-sm font-semibold">Login As</p>
           </div>
           
-          <button onClick={() => handleRoleSelect('student')} className="w-full px-5 py-3.5 text-left text-sm text-gray-700 hover:bg-blue-50 transition font-medium flex items-center space-x-3 border-b border-gray-100">
-            
-            <span>Student</span>
+          <button 
+            onClick={() => handleRoleSelect('student')} 
+            className="w-full px-5 py-3.5 text-left text-sm text-gray-700 hover:bg-blue-50 transition font-medium flex items-center space-x-3 border-b border-gray-100"
+          >
+            <span>Learner</span>
           </button>
 
-          <button onClick={() => handleRoleSelect('trainer')} className="w-full px-5 py-3.5 text-left text-sm text-gray-700 hover:bg-blue-50 transition font-medium flex items-center space-x-3 border-b border-gray-100">
-            
+          <button 
+            onClick={() => handleRoleSelect('trainer')} 
+            className="w-full px-5 py-3.5 text-left text-sm text-gray-700 hover:bg-blue-50 transition font-medium flex items-center space-x-3 border-b border-gray-100"
+          >
             <span>Trainer</span>
           </button>
 
-          <button onClick={() => handleRoleSelect('admin')} className="w-full px-5 py-3.5 text-left text-sm text-gray-700 hover:bg-blue-50 transition font-medium flex items-center space-x-3">
-            
+          <button 
+            onClick={() => handleRoleSelect('institute')} 
+            className="w-full px-5 py-3.5 text-left text-sm text-gray-700 hover:bg-blue-50 transition font-medium flex items-center space-x-3 border-b border-gray-100"
+          >
+            <span>Institute / Partner</span>
+          </button>
+
+          <button 
+            onClick={() => handleRoleSelect('admin')} 
+            className="w-full px-5 py-3.5 text-left text-sm text-gray-700 hover:bg-blue-50 transition font-medium flex items-center space-x-3"
+          >
             <span>Admin</span>
           </button>
         </div>

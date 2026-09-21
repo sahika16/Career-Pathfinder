@@ -10,6 +10,8 @@ function MemberDashboard({ user, onLogout }) {
   const [contents, setContents] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAddContent, setShowAddContent] = useState(false)
+  const [showAddCourse, setShowAddCourse] = useState(false)
+  const [activeTab, setActiveTab] = useState('content')
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -26,10 +28,27 @@ function MemberDashboard({ user, onLogout }) {
   const [selectedContent, setSelectedContent] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
 
+  // Course states
+  const [trainerCourses, setTrainerCourses] = useState([])
+  const [courseFiles, setCourseFiles] = useState([])
+  const [courseUploadProgress, setCourseUploadProgress] = useState('')
+  const [courseForm, setCourseForm] = useState({
+    title: '',
+    description: '',
+    category: '',
+    level: '',
+    duration_minutes: '',
+    max_students: '',
+    price: '',
+    meeting_link: ''
+  })
+
   const MAX_FILE_SIZE_MB = 0.9
+  const courseLevelOptions = ['Easy', 'Medium', 'Hard']
 
   useEffect(() => {
     fetchContents()
+    fetchTrainerCourses()
   }, [])
 
   const fetchContents = async () => {
@@ -40,6 +59,15 @@ function MemberDashboard({ user, onLogout }) {
       console.error('Error fetching contents:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchTrainerCourses = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/trainer/courses/${user.id}`)
+      setTrainerCourses(response.data)
+    } catch (err) {
+      console.error('Error fetching courses:', err)
     }
   }
 
@@ -73,6 +101,26 @@ function MemberDashboard({ user, onLogout }) {
         setFormData({ ...formData, content_type: 'presentation' })
       }
     }
+  }
+
+  const handleCourseInputChange = (e) => {
+    const { name, value } = e.target
+    setCourseForm(prev => ({ ...prev, [name]: value }))
+  }
+
+  const handleCourseFilesChange = (e) => {
+    const files = Array.from(e.target.files)
+    if (files.length === 0) return
+
+    const totalMB = files.reduce((sum, f) => sum + f.size, 0) / (1024 * 1024)
+    if (totalMB > 50) {
+      setError(`Total file size: ${totalMB.toFixed(2)} MB. Maximum is 50MB.`)
+      setTimeout(() => setError(null), 5000)
+      e.target.value = ''
+      return
+    }
+
+    setCourseFiles(files)
   }
 
   const compressFile = async (file) => {
@@ -230,6 +278,111 @@ function MemberDashboard({ user, onLogout }) {
     }
   }
 
+  const handleAddCourse = async (e) => {
+    e.preventDefault()
+
+    if (!courseForm.title || !courseForm.category || !courseForm.level) {
+      setError('Please fill in title, category and level')
+      setTimeout(() => setError(null), 3000)
+      return
+    }
+
+    try {
+      setUploading(true)
+      setCourseUploadProgress('')
+      setError(null)
+
+      let uploadedVideoUrls = []
+      let mainContentUrl = courseForm.meeting_link || ''
+
+      if (courseFiles.length > 0) {
+        setCourseUploadProgress(`Uploading ${courseFiles.length} file(s)...`)
+
+        for (let i = 0; i < courseFiles.length; i++) {
+          const file = courseFiles[i]
+          const sizeMB = file.size / (1024 * 1024)
+
+          setCourseUploadProgress(`Uploading ${i + 1}/${courseFiles.length}: ${file.name} (${sizeMB.toFixed(2)} MB)...`)
+
+          const uploadFormData = new FormData()
+          uploadFormData.append('file', file)
+          uploadFormData.append('trainer_id', user.id)
+
+          try {
+            const uploadRes = await axios.post(
+              `${API_BASE_URL}/member/upload`,
+              uploadFormData,
+              {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                onUploadProgress: (progressEvent) => {
+                  const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+                  setCourseUploadProgress(`${i + 1}/${courseFiles.length}: ${file.name} - ${percent}%`)
+                }
+              }
+            )
+            uploadedVideoUrls.push(uploadRes.data.url)
+          } catch (uploadErr) {
+            console.warn(`Failed to upload ${file.name}:`, uploadErr.message)
+          }
+        }
+
+        if (!mainContentUrl && uploadedVideoUrls.length > 0) {
+          mainContentUrl = uploadedVideoUrls[0]
+        }
+      }
+
+      setCourseUploadProgress('Saving course...')
+
+      await axios.post(`${API_BASE_URL}/trainer/course`, {
+        ...courseForm,
+        trainer_id: user.id,
+        duration_minutes: parseInt(courseForm.duration_minutes) || 0,
+        max_students: parseInt(courseForm.max_students) || 0,
+        price: parseFloat(courseForm.price) || 0,
+        meeting_link: mainContentUrl,
+        content_urls: uploadedVideoUrls.join(',')
+      })
+
+      setSuccess(`Course created with ${uploadedVideoUrls.length} file(s)! Waiting for admin approval.`)
+      setShowAddCourse(false)
+      setCourseFiles([])
+      setCourseForm({
+        title: '',
+        description: '',
+        category: '',
+        level: '',
+        duration_minutes: '',
+        max_students: '',
+        price: '',
+        meeting_link: ''
+      })
+      setCourseUploadProgress('')
+      fetchTrainerCourses()
+      setTimeout(() => setSuccess(null), 5000)
+    } catch (err) {
+      console.error('Course creation error:', err)
+      setError(err.response?.data?.detail || err.message || 'Failed to create course')
+      setCourseUploadProgress('')
+      setTimeout(() => setError(null), 5000)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDeleteCourse = async (courseId) => {
+    if (window.confirm('Delete this course?')) {
+      try {
+        await axios.delete(`${API_BASE_URL}/trainer/course/${courseId}`)
+        fetchTrainerCourses()
+        setSuccess('Course deleted successfully')
+        setTimeout(() => setSuccess(null), 3000)
+      } catch (err) {
+        setError('Failed to delete course')
+        setTimeout(() => setError(null), 3000)
+      }
+    }
+  }
+
   const handleDeleteContent = async (contentId, e) => {
     e.stopPropagation()
     if (window.confirm('Delete this content?')) {
@@ -308,7 +461,7 @@ function MemberDashboard({ user, onLogout }) {
             className="w-full h-full rounded-lg"
           >
             <p className="text-center text-gray-500 py-10">
-              PDF viewer not available. 
+              PDF viewer not available.
               <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-2">
                 Download PDF
               </a>
@@ -381,11 +534,11 @@ function MemberDashboard({ user, onLogout }) {
   return (
     <div className="min-h-screen bg-gray-100">
       <Navbar user={user} onLogout={onLogout} />
-      
+
       <div className="max-w-7xl mx-auto pt-24 px-6 pb-12">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Member Dashboard</h1>
-          <p className="text-gray-500">Manage your content and materials</p>
+          <p className="text-gray-500">Manage your content and courses</p>
         </div>
 
         {success && (
@@ -400,242 +553,528 @@ function MemberDashboard({ user, onLogout }) {
           </div>
         )}
 
-        <button
-          onClick={() => setShowAddContent(!showAddContent)}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition mb-4 ${
-            showAddContent 
-              ? 'bg-red-600 hover:bg-red-700 text-white' 
-              : 'bg-blue-600 hover:bg-blue-700 text-white'
-          }`}
-        >
-          {showAddContent ? 'Cancel' : '+ Add Content'}
-        </button>
-
-        {showAddContent && (
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mb-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">Add New Content</h2>
-            <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg mb-4">
-              ℹ️ All content requires admin approval before being visible to students.
-              For large files (&gt;1 MB), use the URL field instead.
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
+            <p className="text-sm text-gray-500">Total Content</p>
+            <p className="text-2xl font-bold text-blue-600">{contents.length}</p>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
+            <p className="text-sm text-gray-500">Approved</p>
+            <p className="text-2xl font-bold text-green-600">
+              {contents.filter(c => c.status === 'approved').length}
             </p>
-            <form onSubmit={handleAddContent} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Title <span className="text-red-500">*</span></label>
-                  <input
-                    type="text"
-                    name="title"
-                    value={formData.title}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="Enter title"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Content Type <span className="text-red-500">*</span></label>
-                  <select
-                    name="content_type"
-                    value={formData.content_type}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    required
-                  >
-                    <option value="">Select Type</option>
-                    <option value="video">Video</option>
-                    <option value="document">Document</option>
-                    <option value="image">Image</option>
-                    <option value="notes">Notes</option>
-                    <option value="presentation">Presentation</option>
-                    <option value="quiz">Quiz</option>
-                    <option value="assignment">Assignment</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Skill</label>
-                  <input
-                    type="text"
-                    name="skill_name"
-                    value={formData.skill_name}
-                    onChange={handleInputChange}
-                    placeholder="e.g., Python"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Difficulty <span className="text-red-500">*</span></label>
-                  <select
-                    name="difficulty"
-                    value={formData.difficulty}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    required
-                  >
-                    <option value="">Select Difficulty</option>
-                    <option value="Easy">Easy</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Hard">Hard</option>
-                  </select>
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                  <textarea
-                    name="description"
-                    value={formData.description}
-                    onChange={handleInputChange}
-                    rows="2"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="Enter description"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Upload File or Paste Link
-                    <span className="text-xs text-gray-400 font-normal ml-2">
-                      (Max ~1 MB for file upload — use URL for larger files)
-                    </span>
-                  </label>
-                  <div className="flex gap-3">
-                    <input
-                      type="url"
-                      name="content_url"
-                      value={formData.content_url}
-                      onChange={handleInputChange}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                      placeholder="Paste URL here (recommended for large files)"
-                    />
-                    <div className="relative">
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
+            <p className="text-sm text-gray-500">Pending</p>
+            <p className="text-2xl font-bold text-yellow-600">
+              {contents.filter(c => c.status === 'pending' || !c.status).length}
+            </p>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
+            <p className="text-sm text-gray-500">Courses</p>
+            <p className="text-2xl font-bold text-purple-600">{trainerCourses.length}</p>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex flex-wrap gap-2 mb-6">
+          <button
+            onClick={() => { setActiveTab('content'); setShowAddContent(false); setShowAddCourse(false); }}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+              activeTab === 'content'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+            }`}
+          >
+            📚 Content
+          </button>
+          <button
+            onClick={() => { setActiveTab('courses'); setShowAddContent(false); setShowAddCourse(false); }}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+              activeTab === 'courses'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+            }`}
+          >
+            📖 Courses
+          </button>
+        </div>
+
+        {activeTab === 'content' && (
+          <>
+            <button
+              onClick={() => setShowAddContent(!showAddContent)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition mb-4 ${
+                showAddContent
+                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+            >
+              {showAddContent ? 'Cancel' : '+ Add Content'}
+            </button>
+
+            {showAddContent && (
+              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mb-6">
+                <h2 className="text-lg font-bold text-gray-800 mb-4">Add New Content</h2>
+                <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg mb-4">
+                  ℹ️ All content requires admin approval before being visible to students.
+                  For large files (&gt;1 MB), use the URL field instead.
+                </p>
+                <form onSubmit={handleAddContent} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Title <span className="text-red-500">*</span></label>
                       <input
-                        type="file"
-                        onChange={handleFileChange}
-                        accept="video/*,application/pdf,image/*,.doc,.docx,.ppt,.pptx,.txt"
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full"
+                        type="text"
+                        name="title"
+                        value={formData.title}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        placeholder="Enter title"
+                        required
                       />
-                      <button
-                        type="button"
-                        className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition text-sm font-medium whitespace-nowrap"
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Content Type <span className="text-red-500">*</span></label>
+                      <select
+                        name="content_type"
+                        value={formData.content_type}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        required
                       >
-                        Browse
+                        <option value="">Select Type</option>
+                        <option value="video">Video</option>
+                        <option value="document">Document</option>
+                        <option value="image">Image</option>
+                        <option value="notes">Notes</option>
+                        <option value="presentation">Presentation</option>
+                        <option value="quiz">Quiz</option>
+                        <option value="assignment">Assignment</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Skill</label>
+                      <input
+                        type="text"
+                        name="skill_name"
+                        value={formData.skill_name}
+                        onChange={handleInputChange}
+                        placeholder="e.g., Python"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Difficulty <span className="text-red-500">*</span></label>
+                      <select
+                        name="difficulty"
+                        value={formData.difficulty}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        required
+                      >
+                        <option value="">Select Difficulty</option>
+                        <option value="Easy">Easy</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Hard">Hard</option>
+                      </select>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                      <textarea
+                        name="description"
+                        value={formData.description}
+                        onChange={handleInputChange}
+                        rows="2"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        placeholder="Enter description"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Upload File or Paste Link
+                        <span className="text-xs text-gray-400 font-normal ml-2">
+                          (Max ~1 MB for file upload — use URL for larger files)
+                        </span>
+                      </label>
+                      <div className="flex gap-3">
+                        <input
+                          type="url"
+                          name="content_url"
+                          value={formData.content_url}
+                          onChange={handleInputChange}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                          placeholder="Paste URL here (recommended for large files)"
+                        />
+                        <div className="relative">
+                          <input
+                            type="file"
+                            onChange={handleFileChange}
+                            accept="video/*,application/pdf,image/*,.doc,.docx,.ppt,.pptx,.txt"
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full"
+                          />
+                          <button
+                            type="button"
+                            className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition text-sm font-medium whitespace-nowrap"
+                          >
+                            Browse
+                          </button>
+                        </div>
+                      </div>
+                      {selectedFile && (
+                        <div className="mt-1">
+                          <p className="text-xs text-green-600">
+                            Selected: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                          </p>
+                          {selectedFile.size > 1 * 1024 * 1024 && selectedFile.type === 'application/pdf' && (
+                            <p className="text-xs text-amber-600 font-medium mt-1">
+                              ⚠️ PDF is larger than 1 MB — will be rejected. Please use URL field instead.
+                            </p>
+                          )}
+                          {selectedFile.size > 1 * 1024 * 1024 && selectedFile.type.startsWith('image/') && (
+                            <p className="text-xs text-blue-600 font-medium mt-1">
+                              ℹ️ Image will be compressed automatically before upload.
+                            </p>
+                          )}
+                          {selectedFile.size > 1 * 1024 * 1024 && !selectedFile.type.startsWith('image/') && selectedFile.type !== 'application/pdf' && (
+                            <p className="text-xs text-amber-600 font-medium mt-1">
+                              ⚠️ File is larger than 1 MB — may be rejected. Consider using URL field.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {uploadProgress && (
+                    <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm">
+                      ⏳ {uploadProgress}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={uploading}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50"
+                  >
+                    {uploading ? 'Submitting...' : 'Submit Content for Approval'}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* Content Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {contents.length === 0 ? (
+                <div className="col-span-full bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+                  <p className="text-gray-500 text-sm">No content added yet.</p>
+                </div>
+              ) : (
+                contents.map((content) => (
+                  <div
+                    key={content.id}
+                    className="group bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition cursor-pointer"
+                    onClick={() => handleCardClick(content)}
+                  >
+                    <div className="relative aspect-video bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+                      <span className="text-4xl opacity-50">{getContentIcon(content.content_type)}</span>
+
+                      <div
+                        className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-xs font-bold text-white shadow-lg"
+                        style={{ backgroundColor: getDifficultyColor(content.difficulty) }}
+                      >
+                        {content.difficulty || 'N/A'}
+                      </div>
+
+                      <div className={`absolute top-2 right-2 px-2 py-0.5 rounded-full text-xs font-bold border-2 shadow-lg ${getStatusBadge(content.status)}`}>
+                        {getStatusLabel(content.status)}
+                      </div>
+
+                      <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-full text-xs font-medium text-white bg-black/50 backdrop-blur-sm">
+                        {content.content_type}
+                      </div>
+
+                      <button
+                        onClick={(e) => handleDeleteContent(content.id, e)}
+                        className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 shadow-lg"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                       </button>
                     </div>
-                  </div>
-                  {selectedFile && (
-                    <div className="mt-1">
-                      <p className="text-xs text-green-600">
-                        Selected: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
-                      </p>
-                      {selectedFile.size > 1 * 1024 * 1024 && selectedFile.type === 'application/pdf' && (
-                        <p className="text-xs text-amber-600 font-medium mt-1">
-                          ⚠️ PDF is larger than 1 MB — will be rejected. Please use URL field instead.
-                        </p>
+
+                    <div className="p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="font-semibold text-gray-800 text-sm line-clamp-1 flex-1">
+                          {content.title}
+                        </h3>
+                        <span className="text-xs text-gray-400 whitespace-nowrap">
+                          {content.created_at ? new Date(content.created_at).toLocaleDateString() : ''}
+                        </span>
+                      </div>
+
+                      {content.skill_name && (
+                        <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-medium inline-block mt-1">
+                          {content.skill_name}
+                        </span>
                       )}
-                      {selectedFile.size > 1 * 1024 * 1024 && selectedFile.type.startsWith('image/') && (
-                        <p className="text-xs text-blue-600 font-medium mt-1">
-                          ℹ️ Image will be compressed automatically before upload.
-                        </p>
-                      )}
-                      {selectedFile.size > 1 * 1024 * 1024 && !selectedFile.type.startsWith('image/') && selectedFile.type !== 'application/pdf' && (
-                        <p className="text-xs text-amber-600 font-medium mt-1">
-                          ⚠️ File is larger than 1 MB — may be rejected. Consider using URL field.
+
+                      {content.description && (
+                        <p className="text-xs text-gray-500 mt-1.5 line-clamp-2">
+                          {content.description}
                         </p>
                       )}
                     </div>
-                  )}
-                </div>
-              </div>
-
-              {uploadProgress && (
-                <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm">
-                  ⏳ {uploadProgress}
-                </div>
+                  </div>
+                ))
               )}
-
-              <button
-                type="submit"
-                disabled={uploading}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50"
-              >
-                {uploading ? 'Submitting...' : 'Submit Content for Approval'}
-              </button>
-            </form>
-          </div>
+            </div>
+          </>
         )}
 
-        {/* Content Cards - With Status Badge */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {contents.length === 0 ? (
-            <div className="col-span-full bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
-              <p className="text-gray-500 text-sm">No content added yet.</p>
-            </div>
-          ) : (
-            contents.map((content) => (
-              <div 
-                key={content.id} 
-                className="group bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition cursor-pointer"
-                onClick={() => handleCardClick(content)}
-              >
-                <div className="relative aspect-video bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                  <span className="text-4xl opacity-50">{getContentIcon(content.content_type)}</span>
-                  
-                  {/* Difficulty Badge - Top Left */}
-                  <div 
-                    className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-xs font-bold text-white shadow-lg"
-                    style={{ backgroundColor: getDifficultyColor(content.difficulty) }}
-                  >
-                    {content.difficulty || 'N/A'}
+        {activeTab === 'courses' && (
+          <>
+            <button
+              onClick={() => setShowAddCourse(!showAddCourse)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition mb-4 ${
+                showAddCourse
+                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+            >
+              {showAddCourse ? '✕ Cancel' : '+ Create Course'}
+            </button>
+
+            {showAddCourse && (
+              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mb-6">
+                <h2 className="text-lg font-bold text-gray-800 mb-4">Create New Course</h2>
+                <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg mb-4">
+                  ℹ️ All courses require admin approval before being visible to students. You can upload up to 7-8 videos.
+                </p>
+                <form onSubmit={handleAddCourse} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Title <span className="text-red-500">*</span></label>
+                      <input
+                        type="text"
+                        name="title"
+                        value={courseForm.title}
+                        onChange={handleCourseInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        placeholder="e.g., Complete Python Bootcamp"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Category <span className="text-red-500">*</span></label>
+                      <input
+                        type="text"
+                        name="category"
+                        value={courseForm.category}
+                        onChange={handleCourseInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        placeholder="e.g., Technology, Business, Design"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Level <span className="text-red-500">*</span></label>
+                      <select
+                        name="level"
+                        value={courseForm.level}
+                        onChange={handleCourseInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        required
+                      >
+                        <option value="">Select Level</option>
+                        {courseLevelOptions.map(level => (
+                          <option key={level} value={level}>{level}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
+                      <input
+                        type="number"
+                        name="duration_minutes"
+                        value={courseForm.duration_minutes}
+                        onChange={handleCourseInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        min="1"
+                        placeholder="Enter duration"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Max Students</label>
+                      <input
+                        type="number"
+                        name="max_students"
+                        value={courseForm.max_students}
+                        onChange={handleCourseInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        min="1"
+                        placeholder="Enter max students"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Price (₹)</label>
+                      <input
+                        type="number"
+                        name="price"
+                        value={courseForm.price}
+                        onChange={handleCourseInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        min="0"
+                        placeholder="0 for Free"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Meeting Link (Optional)</label>
+                      <input
+                        type="url"
+                        name="meeting_link"
+                        value={courseForm.meeting_link}
+                        onChange={handleCourseInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        placeholder="https://meet.google.com/..."
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Upload Course Videos / Files
+                        <span className="text-xs text-gray-400 font-normal ml-2">
+                          (Upload up to 7-8 videos — total must be under 50 MB)
+                        </span>
+                      </label>
+                      <div className="flex gap-3">
+                        <div className="relative flex-1">
+                          <input
+                            type="file"
+                            multiple
+                            onChange={handleCourseFilesChange}
+                            accept="video/*,.pdf,.doc,.docx,.ppt,.pptx,.zip,.txt"
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full"
+                          />
+                          <button
+                            type="button"
+                            className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition text-sm font-medium whitespace-nowrap w-full"
+                          >
+                            📁 Browse Course Videos / Files
+                          </button>
+                        </div>
+                      </div>
+
+                      {courseFiles.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          <p className="text-xs font-medium text-green-600">
+                            {courseFiles.length} file(s) selected (total: {(courseFiles.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(2)} MB)
+                          </p>
+                          <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-gray-50">
+                            {courseFiles.map((file, idx) => (
+                              <div key={idx} className="flex justify-between items-center text-xs py-1 border-b border-gray-200 last:border-0">
+                                <span className="text-gray-700 truncate mr-2">
+                                  {idx + 1}. {file.name}
+                                </span>
+                                <span className="text-gray-400 whitespace-nowrap">
+                                  {(file.size / 1024 / 1024).toFixed(2)} MB
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                      <textarea
+                        name="description"
+                        value={courseForm.description}
+                        onChange={handleCourseInputChange}
+                        rows="3"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        placeholder="Describe your course..."
+                      />
+                    </div>
                   </div>
 
-                  {/* Approval Status Badge - Top Right */}
-                  <div className={`absolute top-2 right-2 px-2 py-0.5 rounded-full text-xs font-bold border-2 shadow-lg ${getStatusBadge(content.status)}`}>
-                    {getStatusLabel(content.status)}
-                  </div>
+                  {courseUploadProgress && (
+                    <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm">
+                      ⏳ {courseUploadProgress}
+                    </div>
+                  )}
 
-                  {/* Content Type - Bottom Left */}
-                  <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-full text-xs font-medium text-white bg-black/50 backdrop-blur-sm">
-                    {content.content_type}
-                  </div>
-
-                  {/* Delete Button - Bottom Right */}
                   <button
-                    onClick={(e) => handleDeleteContent(content.id, e)}
-                    className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 shadow-lg"
+                    type="submit"
+                    disabled={uploading}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50"
                   >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    {uploading ? 'Submitting...' : 'Submit Course'}
                   </button>
-                </div>
-
-                <div className="p-3">
-                  {/* Title & Date on Same Line */}
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="font-semibold text-gray-800 text-sm line-clamp-1 flex-1">
-                      {content.title}
-                    </h3>
-                    <span className="text-xs text-gray-400 whitespace-nowrap">
-                      {content.created_at ? new Date(content.created_at).toLocaleDateString() : ''}
-                    </span>
-                  </div>
-
-                  {/* Skill Below Title */}
-                  {content.skill_name && (
-                    <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-medium inline-block mt-1">
-                      {content.skill_name}
-                    </span>
-                  )}
-                  
-                  {/* Description */}
-                  {content.description && (
-                    <p className="text-xs text-gray-500 mt-1.5 line-clamp-2">
-                      {content.description}
-                    </p>
-                  )}
-                </div>
+                </form>
               </div>
-            ))
-          )}
-        </div>
+            )}
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h2 className="text-lg font-bold text-gray-800 mb-4">Your Courses</h2>
+              {trainerCourses.length === 0 ? (
+                <p className="text-gray-500 text-center py-6 text-sm">No courses created yet.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {trainerCourses.map((course) => (
+                    <div key={course.id} className={`border-2 rounded-lg p-4 hover:shadow-md transition ${
+                      course.status === 'approved' ? 'border-green-300 bg-green-50/30' :
+                      course.status === 'rejected' ? 'border-red-300 bg-red-50/30' :
+                      'border-yellow-300 bg-yellow-50/30'
+                    }`}>
+                      <div className="flex justify-between items-start">
+                        <h3 className="font-semibold text-gray-800 text-sm">{course.title}</h3>
+                        <span className={`text-xs px-2 py-0.5 rounded-full border ${getStatusBadge(course.status)}`}>
+                          {getStatusLabel(course.status)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-1 line-clamp-2">{course.description}</p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {course.level && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            course.level === 'Easy' ? 'bg-green-100 text-green-700' :
+                            course.level === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {course.level}
+                          </span>
+                        )}
+                        {course.category && (
+                          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">{course.category}</span>
+                        )}
+                        {course.price > 0 ? (
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">₹{course.price}</span>
+                        ) : (
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Free</span>
+                        )}
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">👥 {course.enrolled_count || 0}</span>
+                      </div>
+                      <div className="flex justify-between items-center mt-3">
+                        <p className="text-xs text-gray-400">{course.created_at ? new Date(course.created_at).toLocaleDateString() : ''}</p>
+                        <button onClick={() => handleDeleteCourse(course.id)} className="text-red-500 hover:text-red-700 text-xs font-medium">Delete</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Content Preview Modal */}
@@ -658,7 +1097,6 @@ function MemberDashboard({ user, onLogout }) {
             </div>
 
             <div className="p-6">
-              {/* Status Banner */}
               <div className={`mb-4 px-4 py-2 rounded-lg border-2 ${getStatusBadge(selectedContent.status)}`}>
                 <span className="font-semibold">
                   {selectedContent.status === 'approved' ? '✓ This content has been approved' :

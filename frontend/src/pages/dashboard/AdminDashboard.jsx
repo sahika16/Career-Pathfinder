@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../../components/Navbar'
 import { getAllQuestions, getAllSkillNames, getAllResumes } from '../../utils/api'
+import API_BASE_URL from '../../config'
 
 function AdminDashboard({ user, onLogout }) {
   const navigate = useNavigate()
@@ -10,6 +11,8 @@ function AdminDashboard({ user, onLogout }) {
     skills: 0,
     students: 0,
     trainers: 0,
+    institutes: 0,
+    pendingInstitutes: 0,
     testsCompleted: 0
   })
   const [loading, setLoading] = useState(true)
@@ -31,12 +34,32 @@ function AdminDashboard({ user, onLogout }) {
       const students = resumes.filter(r => r.role === 'student' || !r.role)
       const trainers = resumes.filter(r => r.role === 'trainer')
       const testsDone = resumes.filter(r => r.test_completed === true).length
+
+      // Fetch institutes data
+      let totalInstitutes = 0
+      let pendingInstitutes = 0
+      try {
+        const instRes = await fetch(`${API_BASE_URL}/admin/institutes`)
+        if (instRes.ok) {
+          const institutes = await instRes.json()
+          totalInstitutes = institutes.length
+        }
+        const pendingRes = await fetch(`${API_BASE_URL}/admin/institutes/pending`)
+        if (pendingRes.ok) {
+          const pending = await pendingRes.json()
+          pendingInstitutes = pending.length
+        }
+      } catch (e) {
+        console.error('Error fetching institute stats:', e)
+      }
       
       setStats({
         questions: questions.length || 0,
         skills: skills.skills ? skills.skills.length : 0,
         students: students.length || 0,
         trainers: trainers.length || 0,
+        institutes: totalInstitutes,
+        pendingInstitutes: pendingInstitutes,
         testsCompleted: testsDone || 0
       })
       
@@ -85,7 +108,7 @@ function AdminDashboard({ user, onLogout }) {
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-5 mb-8">
           <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
             <p className="text-sm font-medium text-gray-500">Total Questions</p>
             <p className="text-3xl font-bold text-blue-600 mt-1">{stats.questions}</p>
@@ -95,12 +118,24 @@ function AdminDashboard({ user, onLogout }) {
             <p className="text-3xl font-bold text-purple-600 mt-1">{stats.skills}</p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
-            <p className="text-sm font-medium text-gray-500">Students</p>
+            <p className="text-sm font-medium text-gray-500">Learners</p>
             <p className="text-3xl font-bold text-green-600 mt-1">{stats.students}</p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
             <p className="text-sm font-medium text-gray-500">Trainers</p>
             <p className="text-3xl font-bold text-orange-600 mt-1">{stats.trainers}</p>
+          </div>
+          <div 
+            onClick={() => goTo('/admin/institutes')}
+            className="bg-white rounded-xl shadow-sm p-5 border border-gray-200 cursor-pointer hover:shadow-md transition"
+          >
+            <p className="text-sm font-medium text-gray-500">Institutes</p>
+            <p className="text-3xl font-bold text-pink-600 mt-1">{stats.institutes}</p>
+            {stats.pendingInstitutes > 0 && (
+              <p className="text-xs text-red-600 mt-1 font-medium">
+                {stats.pendingInstitutes} pending
+              </p>
+            )}
           </div>
           <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
             <p className="text-sm font-medium text-gray-500">Tests Completed</p>
@@ -108,7 +143,7 @@ function AdminDashboard({ user, onLogout }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div 
             onClick={() => goTo('/admin/skills')}
             className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 hover:shadow-md transition cursor-pointer group"
@@ -136,12 +171,12 @@ function AdminDashboard({ user, onLogout }) {
                 👨‍🎓
               </div>
               <div>
-                <h3 className="font-semibold text-gray-800">Student Management</h3>
-                <p className="text-sm text-gray-500">View students and progress</p>
+                <h3 className="font-semibold text-gray-800">Learner Management</h3>
+                <p className="text-sm text-gray-500">View learners and progress</p>
               </div>
             </div>
             <div className="text-blue-600 font-medium text-sm group-hover:underline">
-              View Students →
+              View Learners →
             </div>
           </div>
 
@@ -161,6 +196,29 @@ function AdminDashboard({ user, onLogout }) {
             <div className="text-blue-600 font-medium text-sm group-hover:underline">
               View Trainers →
             </div>
+          </div>
+
+          <div 
+            onClick={() => goTo('/admin/institutes')}
+            className="bg-white rounded-xl shadow-sm p-6 border border-pink-200 hover:shadow-md transition cursor-pointer group relative"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-12 h-12 bg-pink-50 rounded-xl flex items-center justify-center text-2xl text-pink-600">
+                🏫
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-800">Institute Management</h3>
+                <p className="text-sm text-gray-500">Review & approve institutes</p>
+              </div>
+            </div>
+            <div className="text-pink-600 font-medium text-sm group-hover:underline">
+              Manage Institutes →
+            </div>
+            {stats.pendingInstitutes > 0 && (
+              <span className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                {stats.pendingInstitutes}
+              </span>
+            )}
           </div>
         </div>
       </div>

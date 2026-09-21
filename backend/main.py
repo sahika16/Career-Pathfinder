@@ -70,7 +70,7 @@ if not os.path.exists("uploads"):
 
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Career Pathfinder API")
+app = FastAPI(title="CareerPath API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -203,12 +203,12 @@ def send_otp_sms(phone_number: str, otp: str, name: str = "Student"):
         client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
         
         message = client.messages.create(
-            body=f"Hello {name}! Your OTP for Career Pathfinder is: {otp}. Valid for 5 minutes.",
+            body=f"Hello {name}! Your OTP for CareerPath is: {otp}. Valid for 5 minutes.",
             from_=TWILIO_PHONE_NUMBER,
             to=phone_number
         )
         
-        print(f"✅ SMS sent to {phone_number}! SID: {message.sid}")
+        #print(f"✅ SMS sent to {phone_number}! SID: {message.sid}")
         return True, message.sid
         
     except Exception as e:
@@ -221,11 +221,11 @@ def send_otp_email(email: str, otp: str, name: str = "Student"):
         <html>
             <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f9fa;">
                 <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                    <h1 style="color: white; margin: 0; font-size: 28px;">Career Pathfinder</h1>
+                    <h1 style="color: white; margin: 0; font-size: 28px;">CareerPath</h1>
                 </div>
                 <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
                     <h2 style="color: #333;">Hello {name}!</h2>
-                    <p style="color: #666; font-size: 16px;">Your OTP for Career Pathfinder login is:</p>
+                    <p style="color: #666; font-size: 16px;">Your OTP for CareerPath login is:</p>
                     <div style="background: #f0f4ff; padding: 20px; border-radius: 8px; text-align: center; font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #667eea; border: 2px dashed #667eea; margin: 20px 0;">
                         {otp}
                     </div>
@@ -238,9 +238,9 @@ def send_otp_email(email: str, otp: str, name: str = "Student"):
         """
         
         msg = MIMEMultipart()
-        msg['From'] = SMTP_EMAIL
+        msg['From'] = f"CareerPath <{SMTP_EMAIL}>"
         msg['To'] = email
-        msg['Subject'] = "Your OTP for Career Pathfinder"
+        msg['Subject'] = "Your OTP for CareerPath"
         msg.attach(MIMEText(html_content, 'html'))
         
         server = smtplib.SMTP('smtp.gmail.com', 587)
@@ -249,7 +249,7 @@ def send_otp_email(email: str, otp: str, name: str = "Student"):
         server.send_message(msg)
         server.quit()
         
-        print(f"📧 Email OTP sent to {email}")  
+        #print(f"📧 Email OTP sent to {email}")  
         return True, "Email sent successfully"
         
     except Exception as e:
@@ -286,7 +286,6 @@ async def upload_resume(
         if phone:
             phone = normalize_phone_for_db(phone)
         
-        # Check if email is already registered as student (only check student table)
         existing_student = db.query(models.Resume).filter(
             func.lower(models.Resume.email) == func.lower(parsed_data.get('email', ''))
         ).first()
@@ -294,7 +293,6 @@ async def upload_resume(
         if existing_student:
             raise HTTPException(status_code=400, detail="Email already registered as student")
         
-        # Check if phone is already registered as student
         if phone:
             existing_phone_student = db.query(models.Resume).filter(
                 models.Resume.phone == phone
@@ -302,14 +300,12 @@ async def upload_resume(
             if existing_phone_student:
                 raise HTTPException(status_code=400, detail="Phone number already registered as student")
         
-        # Check if email is registered as trainer - DON'T BLOCK, just log and allow
         existing_trainer = db.query(models.Trainer).filter(
             func.lower(models.Trainer.email) == func.lower(parsed_data.get('email', ''))
         ).first()
         
         if existing_trainer:
             print(f"ℹ️ Email {parsed_data.get('email')} is already registered as trainer. Creating student profile as well.")
-            # Continue to create the student record - NO BLOCKING!
         
         resume = models.Resume(
             filename=file.filename,
@@ -341,7 +337,6 @@ async def upload_resume(
         db.commit()
         db.refresh(resume)
         
-        # Add extra info in response about dual role
         response_data = {
             "message": "Resume uploaded successfully",
             "id": resume.id,
@@ -352,7 +347,6 @@ async def upload_resume(
             "skills": all_skills
         }
         
-        # If user is also a trainer, add this info to response
         if existing_trainer:
             response_data["is_also_trainer"] = True
             response_data["trainer_id"] = existing_trainer.id
@@ -3210,6 +3204,7 @@ def update_course_progress(enrollment_id: int, progress_data: dict, db: Session 
         "progress": enrollment.progress,
         "status": enrollment.status
     }
+
 
 @app.get("/api/health")
 def health_check():

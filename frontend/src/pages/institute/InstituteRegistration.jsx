@@ -39,10 +39,7 @@ function InstituteRegistration() {
 
   const handleChange = (e) => {
     const { name, value } = e.target
-    setFormData({
-      ...formData,
-      [name]: value
-    })
+    setFormData({ ...formData, [name]: value })
   }
 
   const handleSubmit = async (e) => {
@@ -90,36 +87,18 @@ function InstituteRegistration() {
       })
 
       console.log('Registration response:', response.data)
-
       setSuccess(true)
       setLoading(false)
 
-      // Clear form fields on success
       setFormData({
-        name: '',
-        email: '',
-        phone: '',
-        password: '',
-        confirmPassword: '',
-        institute_name: '',
-        institute_type: '',
-        address: '',
-        city: '',
-        state: '',
-        pincode: '',
-        website: '',
-        description: '',
-        contact_person_name: '',
-        contact_person_designation: '',
-        contact_person_phone: '',
-        registration_number: '',
-        gst_number: '',
-        pan_number: '',
-        partnership_type: ''
+        name: '', email: '', phone: '', password: '', confirmPassword: '',
+        institute_name: '', institute_type: '', address: '', city: '', state: '',
+        pincode: '', website: '', description: '', contact_person_name: '',
+        contact_person_designation: '', contact_person_phone: '',
+        registration_number: '', gst_number: '', pan_number: '', partnership_type: ''
       })
 
       setTimeout(() => navigate('/login/institute'), 3000)
-
     } catch (err) {
       console.error('Registration error:', err)
       setError(err.response?.data?.detail || 'Registration failed. Please try again.')
@@ -144,15 +123,16 @@ function InstituteRegistration() {
         </button>
 
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+          {/* Header */}
           <div className="text-center mb-8">
             <div className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-1 rounded-full text-sm font-bold uppercase tracking-wider">
-              Registration
+              Institute Registration
             </div>
             <h1 className="text-3xl font-extrabold text-gray-900 mt-4">
-              Institute / Partner Registration
+              Join as Institute / Partner
             </h1>
             <p className="text-gray-600 mt-2">
-              Register your training institute or become a partner.
+              Register your training institute to start offering courses.
             </p>
           </div>
 
@@ -171,16 +151,13 @@ function InstituteRegistration() {
           )}
 
           <form onSubmit={handleSubmit}>
-            {/* ===================== ACCOUNT DETAILS ===================== */}
+            {/* ============== ACCOUNT DETAILS ============== */}
             <h2 className="text-lg font-bold text-gray-800 mb-3 mt-2">Account Details</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
                 <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
+                  type="text" name="name" value={formData.name} onChange={handleChange}
                   placeholder="Enter your full name"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
@@ -189,10 +166,7 @@ function InstituteRegistration() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Email Address *</label>
                 <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
+                  type="email" name="email" value={formData.email} onChange={handleChange}
                   placeholder="Enter your email"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
@@ -201,10 +175,7 @@ function InstituteRegistration() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
                 <input
-                  type="tel"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleChange}
+                  type="tel" name="phone" value={formData.phone} onChange={handleChange}
                   placeholder="Enter your phone number"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
@@ -213,9 +184,7 @@ function InstituteRegistration() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Institute Type *</label>
                 <select
-                  name="institute_type"
-                  value={formData.institute_type}
-                  onChange={handleChange}
+                  name="institute_type" value={formData.institute_type} onChange={handleChange}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 >
@@ -228,10 +197,7 @@ function InstituteRegistration() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
                 <input
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
+                  type="password" name="password" value={formData.password} onChange={handleChange}
                   placeholder="Create a password"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
@@ -240,10 +206,7 @@ function InstituteRegistration() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password *</label>
                 <input
-                  type="password"
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
+                  type="password" name="confirmPassword" value={formData.confirmPassword} onChange={handleChange}
                   placeholder="Confirm your password"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
@@ -251,16 +214,13 @@ function InstituteRegistration() {
               </div>
             </div>
 
-            {/* ===================== INSTITUTE DETAILS ===================== */}
+            {/* ============== INSTITUTE DETAILS ============== */}
             <h2 className="text-lg font-bold text-gray-800 mb-3 mt-8 border-t border-gray-100 pt-6">Institute Details</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Institute Name *</label>
                 <input
-                  type="text"
-                  name="institute_name"
-                  value={formData.institute_name}
-                  onChange={handleChange}
+                  type="text" name="institute_name" value={formData.institute_name} onChange={handleChange}
                   placeholder="Enter institute name"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
@@ -269,10 +229,7 @@ function InstituteRegistration() {
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
                 <textarea
-                  name="address"
-                  value={formData.address}
-                  onChange={handleChange}
-                  rows="2"
+                  name="address" value={formData.address} onChange={handleChange} rows="2"
                   placeholder="Enter full address"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -280,10 +237,7 @@ function InstituteRegistration() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
                 <input
-                  type="text"
-                  name="city"
-                  value={formData.city}
-                  onChange={handleChange}
+                  type="text" name="city" value={formData.city} onChange={handleChange}
                   placeholder="Enter city"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -291,10 +245,7 @@ function InstituteRegistration() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
                 <input
-                  type="text"
-                  name="state"
-                  value={formData.state}
-                  onChange={handleChange}
+                  type="text" name="state" value={formData.state} onChange={handleChange}
                   placeholder="Enter state"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -302,10 +253,7 @@ function InstituteRegistration() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Pincode</label>
                 <input
-                  type="text"
-                  name="pincode"
-                  value={formData.pincode}
-                  onChange={handleChange}
+                  type="text" name="pincode" value={formData.pincode} onChange={handleChange}
                   placeholder="Enter pincode"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -313,10 +261,7 @@ function InstituteRegistration() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
                 <input
-                  type="url"
-                  name="website"
-                  value={formData.website}
-                  onChange={handleChange}
+                  type="url" name="website" value={formData.website} onChange={handleChange}
                   placeholder="https://example.com"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -324,26 +269,20 @@ function InstituteRegistration() {
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                 <textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={handleChange}
-                  rows="2"
+                  name="description" value={formData.description} onChange={handleChange} rows="2"
                   placeholder="Describe your institute"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
 
-            {/* ===================== CONTACT & BUSINESS ===================== */}
+            {/* ============== CONTACT & BUSINESS ============== */}
             <h2 className="text-lg font-bold text-gray-800 mb-3 mt-8 border-t border-gray-100 pt-6">Contact & Business Details</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person Name</label>
                 <input
-                  type="text"
-                  name="contact_person_name"
-                  value={formData.contact_person_name}
-                  onChange={handleChange}
+                  type="text" name="contact_person_name" value={formData.contact_person_name} onChange={handleChange}
                   placeholder="Enter contact person name"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -351,10 +290,7 @@ function InstituteRegistration() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
                 <input
-                  type="text"
-                  name="contact_person_designation"
-                  value={formData.contact_person_designation}
-                  onChange={handleChange}
+                  type="text" name="contact_person_designation" value={formData.contact_person_designation} onChange={handleChange}
                   placeholder="Enter designation"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -362,10 +298,7 @@ function InstituteRegistration() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person Phone</label>
                 <input
-                  type="tel"
-                  name="contact_person_phone"
-                  value={formData.contact_person_phone}
-                  onChange={handleChange}
+                  type="tel" name="contact_person_phone" value={formData.contact_person_phone} onChange={handleChange}
                   placeholder="Enter contact phone"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -373,9 +306,7 @@ function InstituteRegistration() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Partnership Type *</label>
                 <select
-                  name="partnership_type"
-                  value={formData.partnership_type}
-                  onChange={handleChange}
+                  name="partnership_type" value={formData.partnership_type} onChange={handleChange}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 >
@@ -388,10 +319,7 @@ function InstituteRegistration() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Registration Number</label>
                 <input
-                  type="text"
-                  name="registration_number"
-                  value={formData.registration_number}
-                  onChange={handleChange}
+                  type="text" name="registration_number" value={formData.registration_number} onChange={handleChange}
                   placeholder="Enter registration number"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -399,10 +327,7 @@ function InstituteRegistration() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">GST Number</label>
                 <input
-                  type="text"
-                  name="gst_number"
-                  value={formData.gst_number}
-                  onChange={handleChange}
+                  type="text" name="gst_number" value={formData.gst_number} onChange={handleChange}
                   placeholder="Enter GST number"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -410,10 +335,7 @@ function InstituteRegistration() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">PAN Number</label>
                 <input
-                  type="text"
-                  name="pan_number"
-                  value={formData.pan_number}
-                  onChange={handleChange}
+                  type="text" name="pan_number" value={formData.pan_number} onChange={handleChange}
                   placeholder="Enter PAN number"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />

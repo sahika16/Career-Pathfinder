@@ -312,3 +312,150 @@ class Attendance(Base):
     student = relationship("Resume", foreign_keys=[student_id], back_populates="attendances")
     session = relationship("TrainerSession", foreign_keys=[session_id], back_populates="attendances")
     trainer = relationship("Trainer", foreign_keys=[marked_by], back_populates="attendances_marked")
+
+# ====== Training Institute/Partner Models ======
+
+class TrainingInstitute(Base):
+    __tablename__ = "training_institutes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    email = Column(String(100), unique=True, nullable=False)
+    phone = Column(String(20), nullable=True)
+    password = Column(String(255), nullable=False)
+    role = Column(String(50), default="institute")
+    
+    # Institute Details
+    institute_name = Column(String(200), nullable=True)
+    institute_type = Column(String(50), default="training")  # training, partner, both
+    address = Column(Text, nullable=True)
+    city = Column(String(100), nullable=True)
+    state = Column(String(100), nullable=True)
+    pincode = Column(String(10), nullable=True)
+    website = Column(String(255), nullable=True)
+    description = Column(Text, nullable=True)
+    
+    # Contact Person
+    contact_person_name = Column(String(100), nullable=True)
+    contact_person_designation = Column(String(100), nullable=True)
+    contact_person_phone = Column(String(20), nullable=True)
+    
+    # Business Details
+    registration_number = Column(String(100), nullable=True)
+    gst_number = Column(String(50), nullable=True)
+    pan_number = Column(String(20), nullable=True)
+    
+    # Approval & Status
+    is_approved = Column(Boolean, default=False)
+    status = Column(String(50), default="pending_approval")  # pending_approval, approved, rejected, suspended
+    
+    # Partnership Details
+    partnership_type = Column(String(50), nullable=True)  # referral, franchise, affiliate
+    commission_rate = Column(DECIMAL(5,2), default=0)
+    
+    # Settings
+    available_days = Column(Text, nullable=True)
+    available_time_start = Column(String(10), nullable=True)
+    available_time_end = Column(String(10), nullable=True)
+    
+    # Stats
+    total_students_enrolled = Column(Integer, default=0)
+    total_courses_offered = Column(Integer, default=0)
+    rating = Column(DECIMAL(3,2), default=0)
+    
+    # Referral
+    referral_code = Column(String(50), nullable=True, unique=True)
+    referral_count = Column(Integer, default=0)
+    referral_earnings = Column(Integer, default=0)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    courses = relationship("InstituteCourse", back_populates="institute", cascade="all, delete-orphan")
+    enrollments = relationship("InstituteEnrollment", back_populates="institute", cascade="all, delete-orphan")
+    batches = relationship("InstituteBatch", back_populates="institute", cascade="all, delete-orphan")
+
+
+class InstituteCourse(Base):
+    __tablename__ = "institute_courses"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    institute_id = Column(Integer, ForeignKey("training_institutes.id"))
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String(100), nullable=True)
+    level = Column(String(50), nullable=True)  # Beginner, Intermediate, Advanced
+    duration_hours = Column(Integer, default=40)
+    duration_weeks = Column(Integer, default=4)
+    mode = Column(String(50), default="online")  # online, offline, hybrid
+    price = Column(DECIMAL(10,2), default=0)
+    max_students_per_batch = Column(Integer, default=30)
+    syllabus = Column(Text, nullable=True)
+    prerequisites = Column(Text, nullable=True)
+    certification = Column(Boolean, default=True)
+    
+    # Approval
+    is_approved = Column(Boolean, default=False)
+    status = Column(String(50), default="pending")
+    admin_notes = Column(Text, nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    institute = relationship("TrainingInstitute", back_populates="courses")
+    batches = relationship("InstituteBatch", back_populates="course", cascade="all, delete-orphan")
+    enrollments = relationship("InstituteEnrollment", back_populates="course", cascade="all, delete-orphan")
+
+
+class InstituteBatch(Base):
+    __tablename__ = "institute_batches"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    institute_id = Column(Integer, ForeignKey("training_institutes.id"))
+    course_id = Column(Integer, ForeignKey("institute_courses.id"))
+    batch_name = Column(String(100), nullable=False)
+    start_date = Column(DateTime(timezone=True), nullable=True)
+    end_date = Column(DateTime(timezone=True), nullable=True)
+    timing = Column(String(100), nullable=True)
+    days = Column(String(100), nullable=True)
+    max_students = Column(Integer, default=30)
+    enrolled_count = Column(Integer, default=0)
+    trainer_name = Column(String(100), nullable=True)
+    meeting_link = Column(Text, nullable=True)
+    status = Column(String(50), default="upcoming")  # upcoming, ongoing, completed, cancelled
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    institute = relationship("TrainingInstitute", back_populates="batches")
+    course = relationship("InstituteCourse", back_populates="batches")
+    enrollments = relationship("InstituteEnrollment", back_populates="batch", cascade="all, delete-orphan")
+
+
+class InstituteEnrollment(Base):
+    __tablename__ = "institute_enrollments"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    institute_id = Column(Integer, ForeignKey("training_institutes.id"))
+    course_id = Column(Integer, ForeignKey("institute_courses.id"))
+    batch_id = Column(Integer, ForeignKey("institute_batches.id"))
+    student_id = Column(Integer, ForeignKey("resumes.id"))
+    
+    student_name = Column(String(100), nullable=True)
+    student_email = Column(String(100), nullable=True)
+    student_phone = Column(String(20), nullable=True)
+    
+    status = Column(String(50), default="enrolled")  # enrolled, in_progress, completed, dropped
+    progress = Column(Integer, default=0)
+    attendance_percentage = Column(Integer, default=0)
+    payment_status = Column(String(50), default="pending")  # pending, partial, completed
+    amount_paid = Column(DECIMAL(10,2), default=0)
+    
+    enrolled_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    institute = relationship("TrainingInstitute", back_populates="enrollments")
+    course = relationship("InstituteCourse", back_populates="enrollments")
+    batch = relationship("InstituteBatch", back_populates="enrollments")
+    student = relationship("Resume")
