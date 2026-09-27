@@ -127,7 +127,6 @@ function Navbar({ onUploadClick, user, onLogout }) {
                   Login
                 </button>
                 
-                {/* Role Dropdown Icon - Shows all roles */}
                 <RoleDropdown />
               </>
             )}

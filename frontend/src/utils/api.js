@@ -500,3 +500,108 @@ export const applyReferral = async (data) => {
     throw error
   }
 }
+
+// ====== RECRUITER API FUNCTIONS ======
+
+export const registerRecruiter = async (recruiterData) => {
+    try {
+        const response = await axios.post(`${API_BASE_URL}/recruiter/register`, recruiterData)
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+export const loginRecruiter = async (email, password) => {
+    try {
+        const response = await axios.post(`${API_BASE_URL}/login/recruiter`, { email, password })
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+export const getRecruiterStudents = async (filters = {}) => {
+    try {
+        const params = new URLSearchParams()
+        if (filters.min_rating) params.append('min_rating', filters.min_rating)
+        if (filters.skill) params.append('skill', filters.skill)
+        if (filters.location) params.append('location', filters.location)
+        if (filters.education) params.append('education', filters.education)
+        if (filters.degree) params.append('degree', filters.degree)
+        if (filters.branch) params.append('branch', filters.branch)
+        if (filters.year_of_passout) params.append('year_of_passout', filters.year_of_passout)
+        if (filters.min_score) params.append('min_score', filters.min_score)
+        
+        const response = await axios.get(`${API_BASE_URL}/recruiter/students?${params.toString()}`)
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+export const getRecruiterStudentDetail = async (studentId) => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/recruiter/student/${studentId}`)
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+export const getAllRecruiters = async () => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/admin/recruiters`)
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+export const approveRecruiter = async (recruiterId) => {
+    try {
+        const response = await axios.put(`${API_BASE_URL}/admin/approve-recruiter/${recruiterId}`)
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+export const rejectRecruiter = async (recruiterId) => {
+    try {
+        const response = await axios.put(`${API_BASE_URL}/admin/reject-recruiter/${recruiterId}`)
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+export const toggleRecruiterVisibility = async (studentId, isVisible, notes = null) => {
+    try {
+        const response = await axios.put(
+            `${API_BASE_URL}/admin/student/${studentId}/toggle-recruiter-visibility`,
+            { is_visible_to_recruiters: isVisible, admin_notes: notes }
+        )
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+export const getStudentProfile = async (resumeId) => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/student/profile/${resumeId}`)
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}
+
+export const updateStudentProfile = async (resumeId, data) => {
+    try {
+        const response = await axios.put(`${API_BASE_URL}/student/profile/${resumeId}`, data)
+        return response.data
+    } catch (error) {
+        throw error
+    }
+}

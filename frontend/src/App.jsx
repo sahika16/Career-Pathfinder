@@ -20,13 +20,20 @@ import AdminSkills from './pages/AdminSkills'
 import AdminStudents from './pages/AdminStudents'
 import AdminTrainers from './pages/AdminTrainers'
 import AdminInstitutes from './pages/AdminInstitutes'
-
+import RecruiterLoginPage from './pages/login/RecruiterLoginPage'
+import RecruiterRegistration from './pages/recruiter/RecruiterRegistration'
+import RecruiterDashboard from './pages/dashboard/RecruiterDashboard'
 import MemberDashboard from './pages/dashboard/MemberDashboard'
 import RegularTrainerDashboard from './pages/dashboard/RegularTrainerDashboard'
 import PersonalizedTrainerDashboard from './pages/dashboard/PersonalizedTrainerDashboard'
-
+import AdminRecruiters from './pages/AdminRecruiters'
 import LearningResourcesPage from './pages/LearningResourcesPage'
 import EnrollmentPage from './pages/EnrollmentPage'
+
+// ============ NEW IMPORTS FOR POSITION FLOW ============
+import RecruiterPositions from './pages/RecruiterPositions'
+import AdminRecommendations from './pages/AdminRecommendations'
+// =======================================================
 
 const USER_STORAGE_KEY = 'careerUser'
 const LOGIN_TIME_KEY = 'careerLoginTime'
@@ -85,6 +92,8 @@ function AppContent() {
       }
     } else if (userData.role === 'institute') {
       navigate('/institute-dashboard')
+    } else if (userData.role === 'recruiter') {
+      navigate('/recruiter-dashboard')
     } else {
       navigate('/student-dashboard')
     }
@@ -118,11 +127,13 @@ function AppContent() {
       <Route path="/login/trainer" element={<TrainerLoginPage />} />
       <Route path="/login/admin" element={<AdminLoginPage onLogin={handleLogin} />} />
       <Route path="/login/institute" element={<InstituteLoginPage onLogin={handleLogin} />} />
+      <Route path="/login/recruiter" element={<RecruiterLoginPage />} />
 
       {/* Registration Routes */}
       <Route path="/trainer/register" element={<TrainerRegistration />} />
       <Route path="/student/register" element={<StudentRegistration />} />
       <Route path="/institute/register" element={<InstituteRegistration />} />
+      <Route path="/recruiter/register" element={<RecruiterRegistration />} />
 
       {/* Skill Routes */}
       <Route path="/skill-review/:resumeId" element={<SkillReviewPage user={user} onLogout={handleLogout} />} />
@@ -172,6 +183,20 @@ function AppContent() {
         </ProtectedRoute>
       } />
 
+      <Route path="/admin/recruiters" element={
+        <ProtectedRoute user={user} allowedRoles={['admin']}>
+          <AdminRecruiters user={user} onLogout={handleLogout} />
+        </ProtectedRoute>
+      } />
+
+      {/* ============ NEW: ADMIN RECOMMENDATIONS ============ */}
+      <Route path="/admin/position/:positionId/recommend" element={
+        <ProtectedRoute user={user} allowedRoles={['admin']}>
+          <AdminRecommendations user={user} onLogout={handleLogout} />
+        </ProtectedRoute>
+      } />
+      {/* =================================================== */}
+
       {/* Dashboard Routes */}
       <Route path="/member-dashboard" element={
         <ProtectedRoute user={user} allowedRoles={['member']}>
@@ -198,6 +223,21 @@ function AppContent() {
         </ProtectedRoute>
       } />
 
+      {/* Recruiter Dashboard */}
+      <Route path="/recruiter-dashboard" element={
+        <ProtectedRoute user={user} allowedRoles={['recruiter']}>
+          <RecruiterDashboard user={user} onLogout={handleLogout} />
+        </ProtectedRoute>
+      } />
+
+      {/* ============ NEW: RECRUITER POSITIONS ============ */}
+      <Route path="/recruiter/positions" element={
+        <ProtectedRoute user={user} allowedRoles={['recruiter']}>
+          <RecruiterPositions user={user} onLogout={handleLogout} />
+        </ProtectedRoute>
+      } />
+      {/* ================================================ */}
+
       {/* Learning Resources - PUBLIC */}
       <Route path="/learning-resources" element={<LearningResourcesPage user={user} onLogout={handleLogout} />} />
 
@@ -217,13 +257,14 @@ function AppContent() {
 
       {/* Universal Dashboard */}
       <Route path="/dashboard" element={
-        <ProtectedRoute user={user} allowedRoles={['student', 'trainer', 'admin', 'member', 'institute']}>
+        <ProtectedRoute user={user} allowedRoles={['student', 'trainer', 'admin', 'member', 'institute', 'recruiter']}>
           {user?.role === 'student' && <StudentDashboard user={user} onLogout={handleLogout} />}
           {user?.role === 'trainer' && user?.category === 'personalized' && <PersonalizedTrainerDashboard user={user} onLogout={handleLogout} />}
           {user?.role === 'trainer' && user?.category !== 'personalized' && <RegularTrainerDashboard user={user} onLogout={handleLogout} />}
           {user?.role === 'member' && <MemberDashboard user={user} onLogout={handleLogout} />}
           {user?.role === 'admin' && <AdminDashboard user={user} onLogout={handleLogout} />}
           {user?.role === 'institute' && <InstituteDashboard user={user} onLogout={handleLogout} />}
+          {user?.role === 'recruiter' && <RecruiterDashboard user={user} onLogout={handleLogout} />}
         </ProtectedRoute>
       } />
     </Routes>

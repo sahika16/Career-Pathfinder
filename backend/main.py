@@ -7,7 +7,7 @@ import io
 import shutil
 from sqlalchemy import func
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta 
 from pydantic import BaseModel
 from typing import List, Optional, Union 
 import models
@@ -15,7 +15,13 @@ from database import engine, get_db
 from resume_parser import parse_resume
 import random
 import string
-from datetime import datetime, timedelta 
+from dotenv import load_dotenv
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from twilio.rest import Client
+import bcrypt
+
 
 class StudentRegister(BaseModel):
     name: str
@@ -35,6 +41,95 @@ class StudentOTPVerify(BaseModel):
     email: str
     otp: str
 
+class InstituteRegister(BaseModel):
+    name: str
+    email: str
+    phone: str
+    password: str
+    institute_name: str
+    institute_type: str
+    address: Optional[str] = ""
+    city: Optional[str] = ""
+    state: Optional[str] = ""
+    pincode: Optional[str] = ""
+    website: Optional[str] = ""
+    description: Optional[str] = ""
+    contact_person_name: Optional[str] = ""
+    contact_person_designation: Optional[str] = ""
+    contact_person_phone: Optional[str] = ""
+    registration_number: Optional[str] = ""
+    gst_number: Optional[str] = ""
+    pan_number: Optional[str] = ""
+    partnership_type: Optional[str] = "referral"
+    display_name: Optional[str] = ""
+    business_constitution: Optional[str] = ""
+    year_of_establishment: Optional[str] = ""
+    primary_training_domain: Optional[str] = ""
+    alternate_contact_number: Optional[str] = ""
+    preferred_contact_method: Optional[str] = ""
+    country: Optional[str] = "India"
+    district: Optional[str] = ""
+    training_delivery_mode: Optional[str] = ""
+    number_of_centres: Optional[str] = ""
+    training_centre_addresses: Optional[str] = ""
+    facilities: Optional[List[str]] = []
+    courses: Optional[List[dict]] = []
+    legal_business_name: Optional[str] = ""
+    udyam_number: Optional[str] = ""
+    government_recognition: Optional[str] = ""
+    recognition_authority: Optional[str] = ""
+    recognition_number: Optional[str] = ""
+    recognition_validity: Optional[str] = ""
+
+class InstituteLogin(BaseModel):
+    email: str
+    password: str
+
+class InstituteCourseCreate(BaseModel):
+    institute_id: int
+    title: str
+    description: Optional[str] = ""
+    category: Optional[str] = ""
+    level: Optional[str] = "Beginner"
+    duration_hours: Optional[int] = 40
+    duration_weeks: Optional[int] = 4
+    mode: Optional[str] = "online"
+    price: Optional[float] = 0
+    max_students_per_batch: Optional[int] = 30
+    syllabus: Optional[str] = ""
+    prerequisites: Optional[str] = ""
+    certification: Optional[bool] = True
+
+class InstituteBatchCreate(BaseModel):
+    institute_id: int
+    course_id: int
+    batch_name: str
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    timing: Optional[str] = ""
+    days: Optional[str] = ""
+    max_students: Optional[int] = 30
+    trainer_name: Optional[str] = ""
+    meeting_link: Optional[str] = ""
+
+class InstituteEnrollmentRequest(BaseModel):
+    institute_id: int
+    course_id: int
+    batch_id: Optional[int] = None
+    student_id: int
+
+class StudentProfileUpdate(BaseModel):
+    education: Optional[str] = None
+    courses: Optional[str] = None
+    certifications: Optional[str] = None
+    projects: Optional[str] = None
+    experience: Optional[str] = None
+    location: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    github_url: Optional[str] = None
+    portfolio_url: Optional[str] = None
+    about: Optional[str] = None
+
 from assessment import (
     generate_test_for_skill, 
     evaluate_test_submission, 
@@ -43,13 +138,6 @@ from assessment import (
     has_test_been_taken,
     get_completed_skills
 )
-import os
-from dotenv import load_dotenv
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from twilio.rest import Client
-import bcrypt
 
 load_dotenv()
 
@@ -74,7 +162,14 @@ app = FastAPI(title="CareerPath API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "https://careerpath.synersyst.com",
+        "http://careerpath.synersyst.com",
+        "http://169.58.40.69",
+        "https://169.58.40.69",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -128,6 +223,7 @@ class TrainerSettingsUpdate(BaseModel):
     qualifications: Optional[str] = ""
     hourly_rate: Optional[str] = None
     skills_taught: Optional[str] = ""
+
 
 def extract_pdf_text(file_content: bytes) -> str:
     try:
@@ -3205,6 +3301,2033 @@ def update_course_progress(enrollment_id: int, progress_data: dict, db: Session 
         "status": enrollment.status
     }
 
+# ====== TRAINING INSTITUTE/PARTNER ENDPOINTS ======
+
+@app.post("/api/institute/register")
+def register_institute(institute_data: InstituteRegister, db: Session = Depends(get_db)):
+    """Register a new training institute/partner"""
+    
+    # Check if email already exists
+    existing = db.query(models.TrainingInstitute).filter(
+        func.lower(models.TrainingInstitute.email) == func.lower(institute_data.email)
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered as institute/partner")
+    
+    # Check if email exists as student or trainer
+    existing_student = db.query(models.Resume).filter(
+        func.lower(models.Resume.email) == func.lower(institute_data.email)
+    ).first()
+    
+    existing_trainer = db.query(models.Trainer).filter(
+        func.lower(models.Trainer.email) == func.lower(institute_data.email)
+    ).first()
+    
+    # Hash password
+    hashed_password = bcrypt.hashpw(
+        institute_data.password.encode('utf-8'), 
+        bcrypt.gensalt()
+    ).decode('utf-8')
+    
+    # Generate referral code
+    import time
+    import random
+    import string
+    name_part = institute_data.institute_name[:3].upper() if institute_data.institute_name else "INS"
+    timestamp_part = str(int(time.time()))[-4:]
+    random_part = ''.join(random.choices(string.digits, k=2))
+    referral_code = f"{name_part}{timestamp_part}{random_part}"
+    
+    # Create institute record
+    institute = models.TrainingInstitute(
+        name=institute_data.name,
+        email=institute_data.email.lower().strip(),
+        phone=institute_data.phone,
+        password=hashed_password,
+        role="institute",
+        institute_name=institute_data.institute_name,
+        institute_type=institute_data.institute_type,
+        address=institute_data.address,
+        city=institute_data.city,
+        state=institute_data.state,
+        pincode=institute_data.pincode,
+        website=institute_data.website,
+        description=institute_data.description,
+        contact_person_name=institute_data.contact_person_name,
+        contact_person_designation=institute_data.contact_person_designation,
+        contact_person_phone=institute_data.contact_person_phone,
+        registration_number=institute_data.registration_number,
+        gst_number=institute_data.gst_number,
+        pan_number=institute_data.pan_number,
+        partnership_type=institute_data.partnership_type,
+        referral_code=referral_code,
+        is_approved=False,
+        status="pending_approval"
+    )
+    
+    db.add(institute)
+    db.commit()
+    db.refresh(institute)
+    
+    return {
+        "message": "Institute/Partner registered successfully. Please wait for admin approval.",
+        "id": institute.id,
+        "name": institute.name,
+        "email": institute.email,
+        "institute_name": institute.institute_name,
+        "institute_type": institute.institute_type,
+        "status": institute.status,
+        "referral_code": institute.referral_code
+    }
+
+
+@app.post("/api/institute/login")
+def login_institute(login_data: InstituteLogin, db: Session = Depends(get_db)):
+    institute = db.query(models.TrainingInstitute).filter(
+        func.lower(models.TrainingInstitute.email) == func.lower(login_data.email)
+    ).first()
+
+    if not institute:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if not bcrypt.checkpw(
+        login_data.password.encode('utf-8'),
+        institute.password.encode('utf-8')
+    ):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # Block if not approved yet
+    if not institute.is_approved or institute.status == "pending_approval":
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is pending admin approval. You will be able to login once approved."
+        )
+
+    if institute.status == "rejected":
+        raise HTTPException(
+            status_code=403,
+            detail="Your registration was rejected. Please contact support."
+        )
+
+    if institute.status == "suspended":
+        raise HTTPException(
+            status_code=403,
+            detail="Your account has been suspended. Please contact support."
+        )
+
+    return {
+        "message": "Login successful",
+        "id": institute.id,
+        "name": institute.name,
+        "email": institute.email,
+        "institute_name": institute.institute_name,
+        "institute_type": institute.institute_type,
+        "role": institute.role,
+        "is_approved": institute.is_approved,
+        "status": institute.status,
+        "referral_code": institute.referral_code
+    }
+
+@app.get("/api/institute/profile/{institute_id}")
+def get_institute_profile(institute_id: int, db: Session = Depends(get_db)):
+    """Get institute profile details"""
+    
+    institute = db.query(models.TrainingInstitute).filter(
+        models.TrainingInstitute.id == institute_id
+    ).first()
+    
+    if not institute:
+        raise HTTPException(status_code=404, detail="Institute not found")
+    
+    return {
+        "id": institute.id,
+        "name": institute.name,
+        "email": institute.email,
+        "phone": institute.phone,
+        "institute_name": institute.institute_name,
+        "institute_type": institute.institute_type,
+        "address": institute.address,
+        "city": institute.city,
+        "state": institute.state,
+        "pincode": institute.pincode,
+        "website": institute.website,
+        "description": institute.description,
+        "contact_person_name": institute.contact_person_name,
+        "contact_person_designation": institute.contact_person_designation,
+        "contact_person_phone": institute.contact_person_phone,
+        "registration_number": institute.registration_number,
+        "gst_number": institute.gst_number,
+        "pan_number": institute.pan_number,
+        "partnership_type": institute.partnership_type,
+        "commission_rate": institute.commission_rate,
+        "is_approved": institute.is_approved,
+        "status": institute.status,
+        "referral_code": institute.referral_code,
+        "referral_count": institute.referral_count,
+        "referral_earnings": institute.referral_earnings,
+        "total_students_enrolled": institute.total_students_enrolled,
+        "total_courses_offered": institute.total_courses_offered,
+        "rating": institute.rating,
+        "created_at": institute.created_at
+    }
+
+
+@app.put("/api/institute/profile/{institute_id}")
+def update_institute_profile(institute_id: int, profile_data: dict, db: Session = Depends(get_db)):
+    """Update institute profile"""
+    
+    institute = db.query(models.TrainingInstitute).filter(
+        models.TrainingInstitute.id == institute_id
+    ).first()
+    
+    if not institute:
+        raise HTTPException(status_code=404, detail="Institute not found")
+    
+    updatable_fields = [
+        'name', 'phone', 'institute_name', 'institute_type', 'address', 'city',
+        'state', 'pincode', 'website', 'description', 'contact_person_name',
+        'contact_person_designation', 'contact_person_phone', 'registration_number',
+        'gst_number', 'pan_number', 'partnership_type', 'available_days',
+        'available_time_start', 'available_time_end'
+    ]
+    
+    for field in updatable_fields:
+        if field in profile_data and profile_data[field] is not None:
+            setattr(institute, field, profile_data[field])
+    
+    db.commit()
+    db.refresh(institute)
+    
+    return {
+        "message": "Profile updated successfully",
+        "id": institute.id
+    }
+
+
+# ====== INSTITUTE COURSE ENDPOINTS ======
+
+@app.post("/api/institute/course")
+def create_institute_course(course_data: InstituteCourseCreate, db: Session = Depends(get_db)):
+    """Create a new course for institute"""
+    
+    institute = db.query(models.TrainingInstitute).filter(
+        models.TrainingInstitute.id == course_data.institute_id
+    ).first()
+    
+    if not institute:
+        raise HTTPException(status_code=404, detail="Institute not found")
+    
+    if not institute.is_approved:
+        raise HTTPException(status_code=403, detail="Your institute is not approved yet. Please wait for admin approval.")
+    
+    new_course = models.InstituteCourse(
+        institute_id=course_data.institute_id,
+        title=course_data.title,
+        description=course_data.description,
+        category=course_data.category,
+        level=course_data.level,
+        duration_hours=course_data.duration_hours,
+        duration_weeks=course_data.duration_weeks,
+        mode=course_data.mode,
+        price=course_data.price,
+        max_students_per_batch=course_data.max_students_per_batch,
+        syllabus=course_data.syllabus,
+        prerequisites=course_data.prerequisites,
+        certification=course_data.certification,
+        status="pending",
+        is_approved=False
+    )
+    
+    db.add(new_course)
+    
+    # Update institute course count
+    institute.total_courses_offered = (institute.total_courses_offered or 0) + 1
+    
+    db.commit()
+    db.refresh(new_course)
+    
+    return {
+        "message": "Course created successfully. Waiting for admin approval.",
+        "id": new_course.id,
+        "title": new_course.title,
+        "status": new_course.status
+    }
+
+
+@app.get("/api/institute/courses/{institute_id}")
+def get_institute_courses(institute_id: int, db: Session = Depends(get_db)):
+    """Get all courses for an institute"""
+    
+    courses = db.query(models.InstituteCourse).filter(
+        models.InstituteCourse.institute_id == institute_id
+    ).order_by(models.InstituteCourse.created_at.desc()).all()
+    
+    result = []
+    for course in courses:
+        batch_count = db.query(models.InstituteBatch).filter(
+            models.InstituteBatch.course_id == course.id
+        ).count()
+        
+        enrollment_count = db.query(models.InstituteEnrollment).filter(
+            models.InstituteEnrollment.course_id == course.id
+        ).count()
+        
+        result.append({
+            "id": course.id,
+            "title": course.title,
+            "description": course.description,
+            "category": course.category,
+            "level": course.level,
+            "duration_hours": course.duration_hours,
+            "duration_weeks": course.duration_weeks,
+            "mode": course.mode,
+            "price": float(course.price) if course.price else 0,
+            "max_students_per_batch": course.max_students_per_batch,
+            "syllabus": course.syllabus,
+            "prerequisites": course.prerequisites,
+            "certification": course.certification,
+            "is_approved": course.is_approved,
+            "status": course.status,
+            "admin_notes": course.admin_notes,
+            "batch_count": batch_count,
+            "enrollment_count": enrollment_count,
+            "created_at": course.created_at
+        })
+    
+    return result
+
+
+@app.put("/api/institute/course/{course_id}")
+def update_institute_course(course_id: int, course_data: dict, db: Session = Depends(get_db)):
+    """Update institute course"""
+    
+    course = db.query(models.InstituteCourse).filter(
+        models.InstituteCourse.id == course_id
+    ).first()
+    
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    updatable_fields = [
+        'title', 'description', 'category', 'level', 'duration_hours',
+        'duration_weeks', 'mode', 'price', 'max_students_per_batch',
+        'syllabus', 'prerequisites', 'certification'
+    ]
+    
+    for field in updatable_fields:
+        if field in course_data and course_data[field] is not None:
+            setattr(course, field, course_data[field])
+    
+    # Reset approval if course was approved
+    if course.status == "approved":
+        course.status = "pending"
+        course.is_approved = False
+    
+    db.commit()
+    db.refresh(course)
+    
+    return {
+        "message": "Course updated successfully. Waiting for admin approval.",
+        "id": course.id,
+        "status": course.status
+    }
+
+
+@app.delete("/api/institute/course/{course_id}")
+def delete_institute_course(course_id: int, db: Session = Depends(get_db)):
+    """Delete institute course"""
+    
+    course = db.query(models.InstituteCourse).filter(
+        models.InstituteCourse.id == course_id
+    ).first()
+    
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    institute = db.query(models.TrainingInstitute).filter(
+        models.TrainingInstitute.id == course.institute_id
+    ).first()
+    
+    db.delete(course)
+    
+    if institute:
+        institute.total_courses_offered = max(0, (institute.total_courses_offered or 1) - 1)
+    
+    db.commit()
+    
+    return {"message": "Course deleted successfully"}
+
+
+# ====== INSTITUTE BATCH ENDPOINTS ======
+
+@app.post("/api/institute/batch")
+def create_institute_batch(batch_data: InstituteBatchCreate, db: Session = Depends(get_db)):
+    """Create a new batch for a course"""
+    
+    institute = db.query(models.TrainingInstitute).filter(
+        models.TrainingInstitute.id == batch_data.institute_id
+    ).first()
+    
+    if not institute:
+        raise HTTPException(status_code=404, detail="Institute not found")
+    
+    course = db.query(models.InstituteCourse).filter(
+        models.InstituteCourse.id == batch_data.course_id,
+        models.InstituteCourse.institute_id == batch_data.institute_id
+    ).first()
+    
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    if not course.is_approved:
+        raise HTTPException(status_code=403, detail="Course is not approved yet. Please wait for admin approval.")
+    
+    new_batch = models.InstituteBatch(
+        institute_id=batch_data.institute_id,
+        course_id=batch_data.course_id,
+        batch_name=batch_data.batch_name,
+        start_date=datetime.fromisoformat(batch_data.start_date) if batch_data.start_date else None,
+        end_date=datetime.fromisoformat(batch_data.end_date) if batch_data.end_date else None,
+        timing=batch_data.timing,
+        days=batch_data.days,
+        max_students=batch_data.max_students,
+        trainer_name=batch_data.trainer_name,
+        meeting_link=batch_data.meeting_link,
+        status="upcoming"
+    )
+    
+    db.add(new_batch)
+    db.commit()
+    db.refresh(new_batch)
+    
+    return {
+        "message": "Batch created successfully",
+        "id": new_batch.id,
+        "batch_name": new_batch.batch_name,
+        "status": new_batch.status
+    }
+
+
+@app.get("/api/institute/batches/{institute_id}")
+def get_institute_batches(institute_id: int, db: Session = Depends(get_db)):
+    """Get all batches for an institute"""
+    
+    batches = db.query(models.InstituteBatch).filter(
+        models.InstituteBatch.institute_id == institute_id
+    ).order_by(models.InstituteBatch.created_at.desc()).all()
+    
+    result = []
+    for batch in batches:
+        course = db.query(models.InstituteCourse).filter(
+            models.InstituteCourse.id == batch.course_id
+        ).first()
+        
+        result.append({
+            "id": batch.id,
+            "batch_name": batch.batch_name,
+            "course_id": batch.course_id,
+            "course_title": course.title if course else "Unknown",
+            "start_date": batch.start_date,
+            "end_date": batch.end_date,
+            "timing": batch.timing,
+            "days": batch.days,
+            "max_students": batch.max_students,
+            "enrolled_count": batch.enrolled_count,
+            "trainer_name": batch.trainer_name,
+            "meeting_link": batch.meeting_link,
+            "status": batch.status,
+            "created_at": batch.created_at
+        })
+    
+    return result
+
+
+@app.get("/api/institute/batch/{batch_id}/students")
+def get_batch_students(batch_id: int, db: Session = Depends(get_db)):
+    """Get all students enrolled in a batch"""
+    
+    enrollments = db.query(models.InstituteEnrollment).filter(
+        models.InstituteEnrollment.batch_id == batch_id
+    ).all()
+    
+    result = []
+    for enrollment in enrollments:
+        result.append({
+            "enrollment_id": enrollment.id,
+            "student_id": enrollment.student_id,
+            "student_name": enrollment.student_name,
+            "student_email": enrollment.student_email,
+            "student_phone": enrollment.student_phone,
+            "status": enrollment.status,
+            "progress": enrollment.progress,
+            "attendance_percentage": enrollment.attendance_percentage,
+            "payment_status": enrollment.payment_status,
+            "amount_paid": float(enrollment.amount_paid) if enrollment.amount_paid else 0,
+            "enrolled_at": enrollment.enrolled_at
+        })
+    
+    return result
+
+
+@app.delete("/api/institute/batch/{batch_id}")
+def delete_institute_batch(batch_id: int, db: Session = Depends(get_db)):
+    """Delete a batch"""
+    
+    batch = db.query(models.InstituteBatch).filter(
+        models.InstituteBatch.id == batch_id
+    ).first()
+    
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    db.delete(batch)
+    db.commit()
+    
+    return {"message": "Batch deleted successfully"}
+
+
+# ====== INSTITUTE ENROLLMENT ENDPOINTS ======
+
+@app.post("/api/institute/enroll")
+def enroll_student_in_institute(enrollment_data: InstituteEnrollmentRequest, db: Session = Depends(get_db)):
+    """Enroll a student in an institute course"""
+    
+    # Check institute
+    institute = db.query(models.TrainingInstitute).filter(
+        models.TrainingInstitute.id == enrollment_data.institute_id
+    ).first()
+    
+    if not institute:
+        raise HTTPException(status_code=404, detail="Institute not found")
+    
+    # Check course
+    course = db.query(models.InstituteCourse).filter(
+        models.InstituteCourse.id == enrollment_data.course_id,
+        models.InstituteCourse.institute_id == enrollment_data.institute_id
+    ).first()
+    
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    if not course.is_approved:
+        raise HTTPException(status_code=403, detail="Course is not approved yet")
+    
+    # Check student
+    student = db.query(models.Resume).filter(
+        models.Resume.id == enrollment_data.student_id
+    ).first()
+    
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    # Check if already enrolled
+    existing = db.query(models.InstituteEnrollment).filter(
+        models.InstituteEnrollment.institute_id == enrollment_data.institute_id,
+        models.InstituteEnrollment.course_id == enrollment_data.course_id,
+        models.InstituteEnrollment.student_id == enrollment_data.student_id
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="Student already enrolled in this course")
+    
+    # Check batch capacity if batch_id provided
+    if enrollment_data.batch_id:
+        batch = db.query(models.InstituteBatch).filter(
+            models.InstituteBatch.id == enrollment_data.batch_id
+        ).first()
+        
+        if not batch:
+            raise HTTPException(status_code=404, detail="Batch not found")
+        
+        if batch.enrolled_count >= batch.max_students:
+            raise HTTPException(status_code=400, detail="Batch is full")
+        
+        batch.enrolled_count = (batch.enrolled_count or 0) + 1
+    
+    # Create enrollment
+    enrollment = models.InstituteEnrollment(
+        institute_id=enrollment_data.institute_id,
+        course_id=enrollment_data.course_id,
+        batch_id=enrollment_data.batch_id,
+        student_id=enrollment_data.student_id,
+        student_name=student.name,
+        student_email=student.email,
+        student_phone=student.phone,
+        status="enrolled"
+    )
+    
+    db.add(enrollment)
+    
+    # Update institute stats
+    institute.total_students_enrolled = (institute.total_students_enrolled or 0) + 1
+    
+    db.commit()
+    db.refresh(enrollment)
+    
+    return {
+        "message": "Student enrolled successfully",
+        "enrollment_id": enrollment.id,
+        "student_name": enrollment.student_name,
+        "course_title": course.title
+    }
+
+
+@app.get("/api/institute/enrollments/{institute_id}")
+def get_institute_enrollments(institute_id: int, db: Session = Depends(get_db)):
+    """Get all enrollments for an institute"""
+    
+    enrollments = db.query(models.InstituteEnrollment).filter(
+        models.InstituteEnrollment.institute_id == institute_id
+    ).order_by(models.InstituteEnrollment.enrolled_at.desc()).all()
+    
+    result = []
+    for enrollment in enrollments:
+        course = db.query(models.InstituteCourse).filter(
+            models.InstituteCourse.id == enrollment.course_id
+        ).first()
+        
+        batch = db.query(models.InstituteBatch).filter(
+            models.InstituteBatch.id == enrollment.batch_id
+        ).first() if enrollment.batch_id else None
+        
+        result.append({
+            "id": enrollment.id,
+            "student_id": enrollment.student_id,
+            "student_name": enrollment.student_name,
+            "student_email": enrollment.student_email,
+            "student_phone": enrollment.student_phone,
+            "course_id": enrollment.course_id,
+            "course_title": course.title if course else "Unknown",
+            "batch_id": enrollment.batch_id,
+            "batch_name": batch.batch_name if batch else None,
+            "status": enrollment.status,
+            "progress": enrollment.progress,
+            "attendance_percentage": enrollment.attendance_percentage,
+            "payment_status": enrollment.payment_status,
+            "amount_paid": float(enrollment.amount_paid) if enrollment.amount_paid else 0,
+            "enrolled_at": enrollment.enrolled_at,
+            "completed_at": enrollment.completed_at
+        })
+    
+    return result
+
+
+@app.put("/api/institute/enrollment/{enrollment_id}/progress")
+def update_institute_enrollment_progress(enrollment_id: int, progress_data: dict, db: Session = Depends(get_db)):
+    """Update student progress in institute course"""
+    
+    enrollment = db.query(models.InstituteEnrollment).filter(
+        models.InstituteEnrollment.id == enrollment_id
+    ).first()
+    
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    
+    if 'progress' in progress_data:
+        enrollment.progress = progress_data['progress']
+        if progress_data['progress'] >= 100:
+            enrollment.status = "completed"
+            enrollment.completed_at = datetime.now(timezone.utc)
+    
+    if 'attendance_percentage' in progress_data:
+        enrollment.attendance_percentage = progress_data['attendance_percentage']
+    
+    if 'payment_status' in progress_data:
+        enrollment.payment_status = progress_data['payment_status']
+    
+    if 'amount_paid' in progress_data:
+        enrollment.amount_paid = progress_data['amount_paid']
+    
+    db.commit()
+    db.refresh(enrollment)
+    
+    return {
+        "message": "Progress updated",
+        "progress": enrollment.progress,
+        "status": enrollment.status
+    }
+
+
+# ====== ADMIN ENDPOINTS FOR INSTITUTE MANAGEMENT ======
+
+@app.get("/api/admin/institutes")
+def get_all_institutes(db: Session = Depends(get_db)):
+    """Admin gets all institutes"""
+    
+    institutes = db.query(models.TrainingInstitute).order_by(
+        models.TrainingInstitute.created_at.desc()
+    ).all()
+    
+    result = []
+    for institute in institutes:
+        result.append({
+            "id": institute.id,
+            "name": institute.name,
+            "email": institute.email,
+            "phone": institute.phone,
+            "institute_name": institute.institute_name,
+            "institute_type": institute.institute_type,
+            "city": institute.city,
+            "state": institute.state,
+            "partnership_type": institute.partnership_type,
+            "is_approved": institute.is_approved,
+            "status": institute.status,
+            "total_students_enrolled": institute.total_students_enrolled,
+            "total_courses_offered": institute.total_courses_offered,
+            "rating": float(institute.rating) if institute.rating else 0,
+            "created_at": institute.created_at
+        })
+    
+    return result
+
+
+@app.get("/api/admin/institutes/pending")
+def get_pending_institutes(db: Session = Depends(get_db)):
+    """Admin gets pending institutes for approval"""
+    
+    institutes = db.query(models.TrainingInstitute).filter(
+        models.TrainingInstitute.is_approved == False,
+        models.TrainingInstitute.status == 'pending_approval'
+    ).order_by(models.TrainingInstitute.created_at.desc()).all()
+    
+    return [
+        {
+            "id": i.id,
+            "name": i.name,
+            "email": i.email,
+            "phone": i.phone,
+            "institute_name": i.institute_name,
+            "institute_type": i.institute_type,
+            "address": i.address,
+            "city": i.city,
+            "state": i.state,
+            "registration_number": i.registration_number,
+            "gst_number": i.gst_number,
+            "contact_person_name": i.contact_person_name,
+            "contact_person_phone": i.contact_person_phone,
+            "partnership_type": i.partnership_type,
+            "created_at": i.created_at
+        }
+        for i in institutes
+    ]
+
+
+@app.put("/api/admin/institute/{institute_id}/approve")
+def approve_institute(institute_id: int, approval_data: dict = None, db: Session = Depends(get_db)):
+    """Admin approves an institute"""
+    
+    institute = db.query(models.TrainingInstitute).filter(
+        models.TrainingInstitute.id == institute_id
+    ).first()
+    
+    if not institute:
+        raise HTTPException(status_code=404, detail="Institute not found")
+    
+    institute.is_approved = True
+    institute.status = "approved"
+    institute.updated_at = datetime.now(timezone.utc)
+    
+    if approval_data and approval_data.get('commission_rate'):
+        institute.commission_rate = approval_data['commission_rate']
+    
+    db.commit()
+    db.refresh(institute)
+    
+    return {
+        "message": "Institute approved successfully",
+        "id": institute.id,
+        "name": institute.name,
+        "status": institute.status,
+        "is_approved": institute.is_approved
+    }
+
+
+@app.put("/api/admin/institute/{institute_id}/reject")
+def reject_institute(institute_id: int, reject_data: dict, db: Session = Depends(get_db)):
+    """Admin rejects an institute"""
+    
+    institute = db.query(models.TrainingInstitute).filter(
+        models.TrainingInstitute.id == institute_id
+    ).first()
+    
+    if not institute:
+        raise HTTPException(status_code=404, detail="Institute not found")
+    
+    institute.is_approved = False
+    institute.status = "rejected"
+    institute.updated_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    db.refresh(institute)
+    
+    return {
+        "message": "Institute rejected",
+        "id": institute.id,
+        "name": institute.name,
+        "status": institute.status
+    }
+
+
+@app.get("/api/admin/institute-courses/pending")
+def get_pending_institute_courses(db: Session = Depends(get_db)):
+    """Admin gets pending institute courses for approval"""
+    
+    courses = db.query(models.InstituteCourse).filter(
+        models.InstituteCourse.is_approved == False,
+        models.InstituteCourse.status == "pending"
+    ).order_by(models.InstituteCourse.created_at.desc()).all()
+    
+    result = []
+    for course in courses:
+        institute = db.query(models.TrainingInstitute).filter(
+            models.TrainingInstitute.id == course.institute_id
+        ).first()
+        
+        result.append({
+            "id": course.id,
+            "title": course.title,
+            "description": course.description,
+            "category": course.category,
+            "level": course.level,
+            "duration_hours": course.duration_hours,
+            "price": float(course.price) if course.price else 0,
+            "institute_id": course.institute_id,
+            "institute_name": institute.institute_name if institute else "Unknown",
+            "institute_email": institute.email if institute else "Unknown",
+            "created_at": course.created_at,
+            "status": course.status
+        })
+    
+    return result
+
+
+@app.put("/api/admin/institute-course/{course_id}/approve")
+def approve_institute_course(course_id: int, approval_data: dict = None, db: Session = Depends(get_db)):
+    """Admin approves an institute course"""
+    
+    course = db.query(models.InstituteCourse).filter(
+        models.InstituteCourse.id == course_id
+    ).first()
+    
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    course.is_approved = True
+    course.status = "approved"
+    course.updated_at = datetime.now(timezone.utc)
+    
+    if approval_data and approval_data.get('admin_notes'):
+        course.admin_notes = approval_data['admin_notes']
+    
+    db.commit()
+    db.refresh(course)
+    
+    return {
+        "message": "Course approved successfully",
+        "id": course.id,
+        "title": course.title,
+        "status": course.status,
+        "is_approved": course.is_approved
+    }
+
+
+@app.put("/api/admin/institute-course/{course_id}/reject")
+def reject_institute_course(course_id: int, reject_data: dict, db: Session = Depends(get_db)):
+    """Admin rejects an institute course"""
+    
+    course = db.query(models.InstituteCourse).filter(
+        models.InstituteCourse.id == course_id
+    ).first()
+    
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    course.is_approved = False
+    course.status = "rejected"
+    course.updated_at = datetime.now(timezone.utc)
+    course.admin_notes = reject_data.get('admin_notes', 'No reason provided')
+    
+    db.commit()
+    db.refresh(course)
+    
+    return {
+        "message": "Course rejected",
+        "id": course.id,
+        "status": course.status,
+        "admin_notes": course.admin_notes
+    }
+
+
+# ====== STUDENT VIEW INSTITUTE COURSES ======
+
+@app.get("/api/student/institute-courses")
+def get_available_institute_courses(db: Session = Depends(get_db)):
+    """Get all approved institute courses for students"""
+    
+    courses = db.query(models.InstituteCourse).filter(
+        models.InstituteCourse.is_approved == True,
+        models.InstituteCourse.status == "approved"
+    ).order_by(models.InstituteCourse.created_at.desc()).all()
+    
+    result = []
+    for course in courses:
+        institute = db.query(models.TrainingInstitute).filter(
+            models.TrainingInstitute.id == course.institute_id
+        ).first()
+        
+        batches = db.query(models.InstituteBatch).filter(
+            models.InstituteBatch.course_id == course.id,
+            models.InstituteBatch.status.in_(['upcoming', 'ongoing'])
+        ).all()
+        
+        result.append({
+            "id": course.id,
+            "title": course.title,
+            "description": course.description,
+            "category": course.category,
+            "level": course.level,
+            "duration_hours": course.duration_hours,
+            "duration_weeks": course.duration_weeks,
+            "mode": course.mode,
+            "price": float(course.price) if course.price else 0,
+            "certification": course.certification,
+            "institute_id": course.institute_id,
+            "institute_name": institute.institute_name if institute else "Unknown",
+            "institute_city": institute.city if institute else "",
+            "institute_rating": float(institute.rating) if institute and institute.rating else 0,
+            "available_batches": [
+                {
+                    "id": b.id,
+                    "batch_name": b.batch_name,
+                    "start_date": b.start_date,
+                    "timing": b.timing,
+                    "days": b.days,
+                    "enrolled_count": b.enrolled_count,
+                    "max_students": b.max_students,
+                    "status": b.status
+                }
+                for b in batches
+            ],
+            "created_at": course.created_at
+        })
+    
+    return result
+
+
+@app.get("/api/student/institute/{institute_id}")
+def get_institute_details_for_student(institute_id: int, db: Session = Depends(get_db)):
+    """Get institute details for students"""
+    
+    institute = db.query(models.TrainingInstitute).filter(
+        models.TrainingInstitute.id == institute_id,
+        models.TrainingInstitute.is_approved == True
+    ).first()
+    
+    if not institute:
+        raise HTTPException(status_code=404, detail="Institute not found or not approved")
+
+    courses = db.query(models.InstituteCourse).filter(
+        models.InstituteCourse.institute_id == institute_id,
+        models.InstituteCourse.is_approved == True
+    ).all()
+    
+    return {
+        "id": institute.id,
+        "institute_name": institute.institute_name,
+        "institute_type": institute.institute_type,
+        "description": institute.description,
+        "city": institute.city,
+        "state": institute.state,
+        "website": institute.website,
+        "rating": float(institute.rating) if institute.rating else 0,
+        "total_students_enrolled": institute.total_students_enrolled,
+        "total_courses_offered": institute.total_courses_offered,
+        "courses": [
+            {
+                "id": c.id,
+                "title": c.title,
+                "description": c.description,
+                "category": c.category,
+                "level": c.level,
+                "price": float(c.price) if c.price else 0,
+                "duration_hours": c.duration_hours,
+                "mode": c.mode
+            }
+            for c in courses
+        ]
+    }
+
+# ============ RECRUITER MODELS ============
+
+class RecruiterRegister(BaseModel):
+    name: str
+    email: str
+    phone: Optional[str] = None
+    password: str
+    company_name: Optional[str] = None
+    company_website: Optional[str] = None
+    company_size: Optional[str] = None
+    industry: Optional[str] = None
+    designation: Optional[str] = None
+    location: Optional[str] = None
+
+
+class RecruiterLogin(BaseModel):
+    email: str
+    password: str
+
+
+# ============ RECRUITER MODELS ============
+
+import json as _json  # added to safely parse/serialize industry list
+
+FREE_EMAIL_DOMAINS = {
+    "gmail.com", "yahoo.com", "outlook.com", "hotmail.com",
+    "rediffmail.com", "yahoo.co.in", "live.com"
+}
+
+
+def is_free_email(email: str) -> bool:
+    if not email or "@" not in email:
+        return False
+    domain = email.split("@")[-1].strip().lower()
+    return domain in FREE_EMAIL_DOMAINS
+
+
+def parse_industry(raw):
+    """industry column stores a JSON list string; return [] on legacy/plain values"""
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        return raw
+    try:
+        return _json.loads(raw)
+    except Exception:
+        return [s.strip() for s in str(raw).split(",") if s.strip()]
+
+
+class RecruiterRegister(BaseModel):
+    # login / account
+    name: str
+    email: str
+    password: str
+    phone: Optional[str] = None
+
+    # recruiter profile
+    designation: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    preferred_contact_method: Optional[str] = None
+
+    # company profile
+    company_name: Optional[str] = None
+    company_type: Optional[str] = None
+    company_website: Optional[str] = None
+    company_size: Optional[str] = None
+    industry: Optional[List[str]] = []
+    company_description: Optional[str] = None
+    company_logo_url: Optional[str] = None
+
+    # location
+    country: Optional[str] = "India"
+    state: Optional[str] = None
+    city: Optional[str] = None
+    complete_address: Optional[str] = None
+    pincode: Optional[str] = None
+
+    # verification
+    legal_business_name: Optional[str] = None
+    gst_number: Optional[str] = None
+    cin_number: Optional[str] = None
+    business_registration_url: Optional[str] = None
+    company_domain_proof_url: Optional[str] = None
+
+
+class RecruiterLogin(BaseModel):
+    email: str
+    password: str
+
+
+# ============ RECRUITER REGISTRATION ============
+
+@app.post("/api/recruiter/register")
+def register_recruiter(recruiter_data: RecruiterRegister, db: Session = Depends(get_db)):
+    """Register a new recruiter (needs admin approval)."""
+
+    # Case-insensitive duplicate check
+    existing = db.query(models.Recruiter).filter(
+        func.lower(models.Recruiter.email) == func.lower(recruiter_data.email)
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    # Also check against other account types
+    existing_student = db.query(models.Resume).filter(
+        func.lower(models.Resume.email) == func.lower(recruiter_data.email)
+    ).first()
+    existing_trainer = db.query(models.Trainer).filter(
+        func.lower(models.Trainer.email) == func.lower(recruiter_data.email)
+    ).first()
+    existing_institute = db.query(models.TrainingInstitute).filter(
+        func.lower(models.TrainingInstitute.email) == func.lower(recruiter_data.email)
+    ).first()
+
+    if existing_student or existing_trainer or existing_institute:
+        raise HTTPException(
+            status_code=400,
+            detail="This email is already registered on the platform with a different role"
+        )
+
+    hashed_password = bcrypt.hashpw(
+        recruiter_data.password.encode("utf-8"),
+        bcrypt.gensalt()
+    ).decode("utf-8")
+
+    # Build a legacy "location" string for old code paths / admin display
+    location_str = ", ".join(
+        [p for p in [recruiter_data.city, recruiter_data.state, recruiter_data.country] if p]
+    ) or None
+
+    # Serialize industry list to JSON
+    industry_str = _json.dumps(recruiter_data.industry or [])
+
+    # Decide initial status — if free email, mark for stricter manual verification
+    initial_status = "pending_approval"
+    if is_free_email(recruiter_data.email):
+        initial_status = "pending_verification"
+
+    recruiter = models.Recruiter(
+        # login / account
+        name=recruiter_data.name,
+        email=recruiter_data.email.lower().strip(),
+        phone=recruiter_data.phone,
+        password=hashed_password,
+        role="recruiter",
+
+        # recruiter profile
+        designation=recruiter_data.designation,
+        linkedin_url=recruiter_data.linkedin_url,
+        preferred_contact_method=recruiter_data.preferred_contact_method,
+
+        # company profile
+        company_name=recruiter_data.company_name,
+        company_type=recruiter_data.company_type,
+        company_website=recruiter_data.company_website,
+        company_size=recruiter_data.company_size,
+        industry=industry_str,
+        company_description=recruiter_data.company_description,
+        company_logo_url=recruiter_data.company_logo_url,
+
+        # location
+        country=recruiter_data.country,
+        state=recruiter_data.state,
+        city=recruiter_data.city,
+        complete_address=recruiter_data.complete_address,
+        pincode=recruiter_data.pincode,
+        location=location_str,
+
+        # verification
+        legal_business_name=recruiter_data.legal_business_name,
+        gst_number=recruiter_data.gst_number,
+        cin_number=recruiter_data.cin_number,
+        business_registration_url=recruiter_data.business_registration_url,
+        company_domain_proof_url=recruiter_data.company_domain_proof_url,
+
+        # status
+        is_approved=False,
+        status=initial_status,
+    )
+
+    db.add(recruiter)
+    db.commit()
+    db.refresh(recruiter)
+
+    return {
+        "message": "Recruiter registered successfully. Please wait for admin approval.",
+        "id": recruiter.id,
+        "name": recruiter.name,
+        "email": recruiter.email,
+        "company_name": recruiter.company_name,
+        "status": recruiter.status,
+    }
+
+
+# ============ RECRUITER LOGIN ============
+
+@app.post("/api/login/recruiter")
+def login_recruiter(login_data: RecruiterLogin, db: Session = Depends(get_db)):
+    """Recruiter login (email + password only)."""
+    recruiter = db.query(models.Recruiter).filter(
+        func.lower(models.Recruiter.email) == func.lower(login_data.email)
+    ).first()
+
+    if not recruiter:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if not bcrypt.checkpw(
+        login_data.password.encode("utf-8"),
+        recruiter.password.encode("utf-8")
+    ):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # Gate by approval status (after password check so we don't leak info)
+    if recruiter.status == "rejected":
+        raise HTTPException(status_code=403, detail="Your registration was rejected. Please contact support.")
+
+    if recruiter.status == "suspended":
+        raise HTTPException(status_code=403, detail="Your account has been suspended. Please contact support.")
+
+    if not recruiter.is_approved:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is pending approval. You will be able to login once approved."
+        )
+
+    return {
+        "message": "Login successful",
+        "id": recruiter.id,
+        "name": recruiter.name,
+        "email": recruiter.email,
+        "phone": recruiter.phone,
+        "company_name": recruiter.company_name,
+        "company_type": recruiter.company_type,
+        "industry": parse_industry(recruiter.industry),
+        "designation": recruiter.designation,
+        "preferred_contact_method": recruiter.preferred_contact_method,
+        "role": "recruiter",
+        "is_approved": recruiter.is_approved,
+        "status": recruiter.status,
+    }
+
+
+# ============ ADMIN: MANAGE RECRUITERS ============
+
+@app.get("/api/admin/recruiters")
+def get_all_recruiters(db: Session = Depends(get_db)):
+    """Get all recruiters with full company details."""
+    recruiters = db.query(models.Recruiter).order_by(
+        models.Recruiter.created_at.desc()
+    ).all()
+
+    return [
+        {
+            "id": r.id,
+            "name": r.name,
+            "email": r.email,
+            "phone": r.phone,
+            "designation": r.designation,
+            "linkedin_url": r.linkedin_url,
+            "preferred_contact_method": r.preferred_contact_method,
+
+            "company_name": r.company_name,
+            "company_type": r.company_type,
+            "company_website": r.company_website,
+            "company_size": r.company_size,
+            "industry": parse_industry(r.industry),
+            "company_description": r.company_description,
+            "company_logo_url": r.company_logo_url,
+
+            "country": r.country,
+            "state": r.state,
+            "city": r.city,
+            "complete_address": r.complete_address,
+            "pincode": r.pincode,
+            "location": r.location,
+
+            "legal_business_name": r.legal_business_name,
+            "gst_number": r.gst_number,
+            "cin_number": r.cin_number,
+            "business_registration_url": r.business_registration_url,
+            "company_domain_proof_url": r.company_domain_proof_url,
+
+            "is_approved": r.is_approved,
+            "status": r.status,
+            "created_at": r.created_at,
+            "updated_at": r.updated_at,
+        }
+        for r in recruiters
+    ]
+
+
+@app.put("/api/admin/approve-recruiter/{recruiter_id}")
+def approve_recruiter(recruiter_id: int, db: Session = Depends(get_db)):
+    """Approve a recruiter."""
+    recruiter = db.query(models.Recruiter).filter(
+        models.Recruiter.id == recruiter_id
+    ).first()
+
+    if not recruiter:
+        raise HTTPException(status_code=404, detail="Recruiter not found")
+
+    recruiter.is_approved = True
+    recruiter.status = "approved"
+    recruiter.updated_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(recruiter)
+
+    return {
+        "message": "Recruiter approved successfully",
+        "id": recruiter.id,
+        "status": recruiter.status,
+        "is_approved": recruiter.is_approved,
+    }
+
+
+@app.put("/api/admin/reject-recruiter/{recruiter_id}")
+def reject_recruiter(recruiter_id: int, db: Session = Depends(get_db)):
+    """Reject a recruiter."""
+    recruiter = db.query(models.Recruiter).filter(
+        models.Recruiter.id == recruiter_id
+    ).first()
+
+    if not recruiter:
+        raise HTTPException(status_code=404, detail="Recruiter not found")
+
+    recruiter.is_approved = False
+    recruiter.status = "rejected"
+    recruiter.updated_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(recruiter)
+
+    return {
+        "message": "Recruiter rejected",
+        "id": recruiter.id,
+        "status": recruiter.status,
+    }
+
+
+@app.put("/api/admin/recruiter/{recruiter_id}/status")
+def set_recruiter_status(recruiter_id: int, data: dict, db: Session = Depends(get_db)):
+    """Update recruiter verification status.
+
+    Allowed values:
+      email_verified, company_verified, recruiter_verified,
+      pending_verification, verification_required,
+      suspended, approved, rejected
+    """
+    allowed = {
+        "email_verified", "company_verified", "recruiter_verified",
+        "pending_verification", "verification_required",
+        "suspended", "approved", "rejected",
+    }
+    new_status = data.get("status")
+    if new_status not in allowed:
+        raise HTTPException(status_code=400, detail="Invalid status")
+
+    recruiter = db.query(models.Recruiter).filter(
+        models.Recruiter.id == recruiter_id
+    ).first()
+    if not recruiter:
+        raise HTTPException(status_code=404, detail="Recruiter not found")
+
+    recruiter.status = new_status
+
+    # Toggle is_approved based on status
+    if new_status in ("approved", "company_verified", "recruiter_verified", "email_verified"):
+        recruiter.is_approved = True
+    elif new_status in ("rejected", "suspended", "pending_verification", "verification_required"):
+        recruiter.is_approved = False
+
+    recruiter.updated_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(recruiter)
+
+    return {
+        "message": "Status updated",
+        "id": recruiter.id,
+        "status": recruiter.status,
+        "is_approved": recruiter.is_approved,
+    }
+
+@app.put("/api/admin/student/{student_id}/toggle-recruiter-visibility")
+def toggle_recruiter_visibility(student_id: int, data: dict, db: Session = Depends(get_db)):
+    """Admin approves/hides student profile from recruiters"""
+    student = db.query(models.Resume).filter(models.Resume.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    is_visible = data.get('is_visible_to_recruiters', True)
+    admin_notes = data.get('admin_notes', None)
+    
+    student.is_visible_to_recruiters = is_visible
+    if is_visible:
+        student.approved_by_admin_at = datetime.now(timezone.utc)
+        if admin_notes:
+            student.admin_notes = admin_notes
+    else:
+        student.approved_by_admin_at = None
+    
+    db.commit()
+    db.refresh(student)
+    
+    return {
+        "message": f"Student visibility set to {is_visible}",
+        "id": student.id,
+        "is_visible_to_recruiters": student.is_visible_to_recruiters
+    }
+
+
+# ============ RECRUITER: VIEW STUDENTS ============
+
+@app.get("/api/recruiter/students")
+def get_recruiter_students(
+    min_rating: Optional[int] = None,
+    skill: Optional[str] = None,
+    location: Optional[str] = None,
+    education: Optional[str] = None,
+    min_score: Optional[float] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get students visible to recruiters with filters.
+    Only returns students approved by admin (is_visible_to_recruiters=True)
+    """
+    query = db.query(models.Resume).filter(
+        models.Resume.is_visible_to_recruiters == True
+    )
+    
+    # Filter by location
+    if location:
+        query = query.filter(models.Resume.location.ilike(f"%{location}%"))
+    
+    # Filter by education
+    if education:
+        query = query.filter(models.Resume.education.ilike(f"%{education}%"))
+    
+    students = query.order_by(models.Resume.approved_by_admin_at.desc()).all()
+    
+    result = []
+    for student in students:
+        # Get skills
+        skills = db.query(models.Skill).filter(
+            models.Skill.resume_id == student.id
+        ).all()
+        
+        # Filter by skill
+        if skill:
+            skill_match = any(skill.lower() in s.skill_name.lower() for s in skills)
+            if not skill_match:
+                continue
+        
+        # Filter by minimum rating
+        if min_rating:
+            max_rating = max([s.rating for s in skills if s.rating] or [0])
+            if max_rating < min_rating:
+                continue
+        
+        # Get test results
+        test_results = db.query(models.TestSummary).filter(
+            models.TestSummary.resume_id == student.id
+        ).all()
+        
+        # Filter by minimum test score
+        if min_score:
+            max_score = max([t.score_percentage for t in test_results] or [0])
+            if max_score < min_score:
+                continue
+        
+        result.append({
+            "id": student.id,
+            "name": student.name,
+            "email": student.email,
+            "phone": student.phone,
+            "location": student.location,
+            "education": student.education,
+            "about": student.about,
+            "linkedin_url": student.linkedin_url,
+            "github_url": student.github_url,
+            "portfolio_url": student.portfolio_url,
+            "skills": [
+                {
+                    "id": s.id,
+                    "skill_name": s.skill_name,
+                    "rating": s.rating,
+                    "rating_level": s.rating_level
+                }
+                for s in skills
+            ],
+            "test_results": [
+                {
+                    "skill_name": t.skill_name,
+                    "score_percentage": t.score_percentage,
+                    "result_status": t.result_status,
+                    "test_date": t.test_date
+                }
+                for t in test_results
+            ],
+            "courses": student.courses,
+            "certifications": student.certifications,
+            "projects": student.projects,
+            "experience": student.experience,
+            "approved_at": student.approved_by_admin_at
+        })
+    
+    return result
+
+
+@app.get("/api/recruiter/student/{student_id}")
+def get_recruiter_student_detail(student_id: int, db: Session = Depends(get_db)):
+    """Get detailed view of a single student for recruiter"""
+    student = db.query(models.Resume).filter(
+        models.Resume.id == student_id,
+        models.Resume.is_visible_to_recruiters == True
+    ).first()
+    
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found or not visible to recruiters")
+    
+    skills = db.query(models.Skill).filter(
+        models.Skill.resume_id == student.id
+    ).all()
+    
+    test_results = db.query(models.TestSummary).filter(
+        models.TestSummary.resume_id == student.id
+    ).all()
+    
+    return {
+        "id": student.id,
+        "name": student.name,
+        "email": student.email,
+        "phone": student.phone,
+        "location": student.location,
+        "education": student.education,
+        "about": student.about,
+        "linkedin_url": student.linkedin_url,
+        "github_url": student.github_url,
+        "portfolio_url": student.portfolio_url,
+        "experience": student.experience,
+        "courses": student.courses,
+        "certifications": student.certifications,
+        "projects": student.projects,
+        "skills": [
+            {
+                "id": s.id,
+                "skill_name": s.skill_name,
+                "rating": s.rating,
+                "rating_level": s.rating_level
+            }
+            for s in skills
+        ],
+        "test_results": [
+            {
+                "skill_name": t.skill_name,
+                "total_questions": t.total_questions,
+                "correct_answers": t.correct_answers,
+                "score_percentage": t.score_percentage,
+                "result_status": t.result_status,
+                "test_date": t.test_date
+            }
+            for t in test_results
+        ]
+    }
+
+# ============ STUDENT PROFILE ENDPOINTS ============
+
+@app.get("/api/student/profile/{resume_id}")
+def get_student_profile(resume_id: int, db: Session = Depends(get_db)):
+    """Get student profile details"""
+    student = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    return {
+        "id": student.id,
+        "name": student.name,
+        "email": student.email,
+        "phone": student.phone,
+        "education": student.education,
+        "courses": student.courses,
+        "certifications": student.certifications,
+        "projects": student.projects,
+        "experience": student.experience,
+        "location": student.location,
+        "linkedin_url": student.linkedin_url,
+        "github_url": student.github_url,
+        "portfolio_url": student.portfolio_url,
+        "about": student.about,
+        "is_visible_to_recruiters": student.is_visible_to_recruiters
+    }
+
+
+@app.put("/api/student/profile/{resume_id}")
+def update_student_profile(
+    resume_id: int,
+    data: StudentProfileUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update student profile details"""
+    student = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    if data.education is not None:
+        student.education = data.education
+    if data.courses is not None:
+        student.courses = data.courses
+    if data.certifications is not None:
+        student.certifications = data.certifications
+    if data.projects is not None:
+        student.projects = data.projects
+    if data.experience is not None:
+        student.experience = data.experience
+    if data.location is not None:
+        student.location = data.location
+    if data.linkedin_url is not None:
+        student.linkedin_url = data.linkedin_url
+    if data.github_url is not None:
+        student.github_url = data.github_url
+    if data.portfolio_url is not None:
+        student.portfolio_url = data.portfolio_url
+    if data.about is not None:
+        student.about = data.about
+    
+    db.commit()
+    db.refresh(student)
+    
+    return {"message": "Profile updated successfully", "id": student.id}
+
+@app.get("/api/resumes")
+def get_all_resumes(db: Session = Depends(get_db)):
+    resumes = db.query(models.Resume).order_by(models.Resume.uploaded_at.desc()).all()
+    
+    result = []
+    for resume in resumes:
+        skills = db.query(models.Skill).filter(models.Skill.resume_id == resume.id).all()
+        concepts = db.query(models.ConceptSkill).filter(models.ConceptSkill.resume_id == resume.id).all()
+        result.append({
+            "id": resume.id,
+            "filename": resume.filename,
+            "name": resume.name,
+            "email": resume.email,
+            "phone": resume.phone,
+            "role": resume.role or "student",
+            "skills": [s.skill_name for s in skills],
+            "concepts": [c.concept_name for c in concepts],
+            "skills_rated": resume.skills_rated,
+            "test_completed": resume.test_completed,
+            "uploaded_at": resume.uploaded_at,
+            "current_step": resume.current_step,
+            "status": resume.status,
+            # NEW FIELDS
+            "is_visible_to_recruiters": resume.is_visible_to_recruiters or False,
+            "approved_by_admin_at": resume.approved_by_admin_at,
+            "admin_notes": resume.admin_notes,
+            "location": resume.location,
+            "education": resume.education,
+            "about": resume.about,
+            "linkedin_url": resume.linkedin_url,
+            "github_url": resume.github_url,
+            "portfolio_url": resume.portfolio_url,
+            "courses": resume.courses,
+            "certifications": resume.certifications,
+            "projects": resume.projects,
+            "experience": resume.experience
+        })
+    return result
+
+class PositionCreate(BaseModel):
+    recruiter_id: int
+    title: str
+    department: Optional[str] = None
+    vacancies: Optional[int] = 1
+    location: Optional[str] = None
+    work_mode: Optional[str] = None
+    employment_type: Optional[str] = None
+    min_qualification: Optional[str] = None
+    specialization: Optional[str] = None
+    graduation_years: Optional[str] = None
+    min_percentage: Optional[str] = None
+    required_skills: Optional[str] = None
+    preferred_skills: Optional[str] = None
+    experience_level: Optional[str] = None
+    salary_range: Optional[str] = None
+    joining_requirement: Optional[str] = None
+
+
+class SendProfilesPayload(BaseModel):
+    position_id: int
+    student_ids: List[int]
+    admin_notes: Optional[str] = None
+
+
+
+@app.post("/api/recruiter/position")
+def create_position(data: PositionCreate, db: Session = Depends(get_db)):
+    recruiter = db.query(models.Recruiter).filter(
+        models.Recruiter.id == data.recruiter_id
+    ).first()
+    if not recruiter:
+        raise HTTPException(status_code=404, detail="Recruiter not found")
+
+    position = models.Position(**data.dict())
+    db.add(position)
+    db.commit()
+    db.refresh(position)
+
+    return {"message": "Position created", "id": position.id, "status": position.status}
+
+
+@app.get("/api/recruiter/{recruiter_id}/positions")
+def list_positions(recruiter_id: int, db: Session = Depends(get_db)):
+    positions = db.query(models.Position).filter(
+        models.Position.recruiter_id == recruiter_id
+    ).order_by(models.Position.created_at.desc()).all()
+
+    return [
+        {
+            "id": p.id,
+            "title": p.title,
+            "department": p.department,
+            "vacancies": p.vacancies,
+            "location": p.location,
+            "work_mode": p.work_mode,
+            "employment_type": p.employment_type,
+            "required_skills": p.required_skills,
+            "status": p.status,
+            "created_at": p.created_at,
+            "candidate_count": len(p.recommendations)
+        }
+        for p in positions
+    ]
+
+
+@app.get("/api/recruiter/{recruiter_id}/stats")
+def recruiter_stats(recruiter_id: int, db: Session = Depends(get_db)):
+    """Dashboard metrics"""
+    positions = db.query(models.Position).filter(
+        models.Position.recruiter_id == recruiter_id,
+        models.Position.status == "open"
+    ).all()
+
+    all_recs = db.query(models.ProfileRecommendation).filter(
+        models.ProfileRecommendation.recruiter_id == recruiter_id
+    ).all()
+
+    return {
+        "activePositions": len(positions),
+        "profilesReceived": len(all_recs),
+        "newProfiles": len([r for r in all_recs if r.status == "sent"]),
+        "shortlisted": len([r for r in all_recs if r.status == "shortlisted"]),
+        "interviews": len([r for r in all_recs if r.status == "interview"]),
+        "selected": len([r for r in all_recs if r.status in ("selected", "offered", "joined")])
+    }
+
+
+@app.get("/api/admin/position/{position_id}/matching-students")
+def get_matching_students(position_id: int, db: Session = Depends(get_db)):
+    """Find students matching a position's requirements"""
+    position = db.query(models.Position).filter(models.Position.id == position_id).first()
+    if not position:
+        raise HTTPException(status_code=404, detail="Position not found")
+
+    # Start with all students
+    students = db.query(models.Resume).filter(
+        models.Resume.role == "student"
+    ).all()
+
+    # Already-recommended student IDs for this position
+    already_recs = db.query(models.ProfileRecommendation.student_id).filter(
+        models.ProfileRecommendation.position_id == position_id
+    ).all()
+    already_sent = {r[0] for r in already_recs}
+
+    required_skills = []
+    if position.required_skills:
+        required_skills = [s.strip().lower() for s in position.required_skills.split(",") if s.strip()]
+
+    result = []
+    for student in students:
+        skills = db.query(models.Skill).filter(
+            models.Skill.resume_id == student.id
+        ).all()
+        skill_names = [s.skill_name.lower() for s in skills]
+
+        # Skill match
+        matched = [rs for rs in required_skills if any(rs in sn for sn in skill_names)]
+        match_score = (len(matched) / len(required_skills) * 100) if required_skills else 0
+
+        # Test scores
+        tests = db.query(models.TestSummary).filter(
+            models.TestSummary.resume_id == student.id
+        ).all()
+        avg_score = sum([t.score_percentage for t in tests]) / len(tests) if tests else 0
+
+        result.append({
+            "id": student.id,
+            "name": student.name,
+            "email": student.email,
+            "location": student.location,
+            "education": student.education or student.degree,
+            "graduation_year": student.year_of_passout,
+            "skills": [s.skill_name for s in skills],
+            "match_score": round(match_score, 1),
+            "matched_skills": matched,
+            "avg_test_score": round(avg_score, 1),
+            "already_recommended": student.id in already_sent,
+            "profile_complete": bool(student.education and student.skills),
+            "is_visible_to_recruiters": student.is_visible_to_recruiters or False
+        })
+
+    result.sort(key=lambda x: (x["match_score"], x["avg_test_score"]), reverse=True)
+    return result
+
+
+@app.post("/api/admin/send-profiles")
+def send_profiles_to_recruiter(data: SendProfilesPayload, db: Session = Depends(get_db)):
+    """Admin sends selected students to recruiter for a position"""
+    position = db.query(models.Position).filter(models.Position.id == data.position_id).first()
+    if not position:
+        raise HTTPException(status_code=404, detail="Position not found")
+
+    sent = 0
+    skipped = 0
+    for student_id in data.student_ids:
+        # Skip if already sent
+        existing = db.query(models.ProfileRecommendation).filter(
+            models.ProfileRecommendation.position_id == data.position_id,
+            models.ProfileRecommendation.student_id == student_id
+        ).first()
+
+        if existing:
+            skipped += 1
+            continue
+
+        rec = models.ProfileRecommendation(
+            position_id=data.position_id,
+            student_id=student_id,
+            recruiter_id=position.recruiter_id,
+            admin_notes=data.admin_notes,
+            status="sent"
+        )
+        db.add(rec)
+
+        # Also mark student visible to recruiters (so they can be viewed)
+        student = db.query(models.Resume).filter(models.Resume.id == student_id).first()
+        if student and not student.is_visible_to_recruiters:
+            student.is_visible_to_recruiters = True
+            student.approved_by_admin_at = datetime.now(timezone.utc)
+            if data.admin_notes:
+                student.admin_notes = data.admin_notes
+
+        sent += 1
+
+    db.commit()
+    return {"message": f"Sent {sent} profiles", "sent": sent, "skipped": skipped}
+
+
+@app.get("/api/admin/pipeline/{position_id}")
+def admin_pipeline(position_id: int, db: Session = Depends(get_db)):
+    """Admin: track hiring pipeline for a position"""
+    position = db.query(models.Position).filter(models.Position.id == position_id).first()
+    if not position:
+        raise HTTPException(status_code=404, detail="Position not found")
+
+    recs = db.query(models.ProfileRecommendation).filter(
+        models.ProfileRecommendation.position_id == position_id
+    ).all()
+
+    def count(statuses):
+        return len([r for r in recs if r.status in statuses])
+
+    return {
+        "position_title": position.title,
+        "vacancies": position.vacancies,
+        "total_recommended": len(recs),
+        "sent": count(["sent"]),
+        "viewed": count(["viewed"]),
+        "shortlisted": count(["shortlisted"]),
+        "interview": count(["interview"]),
+        "selected": count(["selected", "offered"]),
+        "joined": count(["joined"]),
+        "rejected": count(["rejected"]),
+    }
+@app.get("/api/admin/recruiters")
+def get_all_recruiters(db: Session = Depends(get_db)):
+    """Get all recruiters with full company details (safe against missing columns)."""
+    recruiters = db.query(models.Recruiter).order_by(
+        models.Recruiter.created_at.desc()
+    ).all()
+
+    def safe(obj, attr, default=None):
+        return getattr(obj, attr, default)
+
+    return [
+        {
+            "id": r.id,
+            "name": safe(r, "name"),
+            "email": safe(r, "email"),
+            "phone": safe(r, "phone"),
+            "designation": safe(r, "designation"),
+            "linkedin_url": safe(r, "linkedin_url"),
+            "preferred_contact_method": safe(r, "preferred_contact_method"),
+
+            "company_name": safe(r, "company_name"),
+            "company_type": safe(r, "company_type"),
+            "company_website": safe(r, "company_website"),
+            "company_size": safe(r, "company_size"),
+            "industry": parse_industry(safe(r, "industry")),
+            "company_description": safe(r, "company_description"),
+            "company_logo_url": safe(r, "company_logo_url"),
+
+            "country": safe(r, "country"),
+            "state": safe(r, "state"),
+            "city": safe(r, "city"),
+            "complete_address": safe(r, "complete_address"),
+            "pincode": safe(r, "pincode"),
+            "location": safe(r, "location"),
+
+            "legal_business_name": safe(r, "legal_business_name"),
+            "gst_number": safe(r, "gst_number"),
+            "cin_number": safe(r, "cin_number"),
+            "business_registration_url": safe(r, "business_registration_url"),
+            "company_domain_proof_url": safe(r, "company_domain_proof_url"),
+
+            "is_approved": safe(r, "is_approved", False),
+            "status": safe(r, "status", "pending_approval"),
+            "created_at": safe(r, "created_at"),
+            "updated_at": safe(r, "updated_at"),
+        }
+        for r in recruiters
+    ]
+
+@app.get("/api/recruiter/{recruiter_id}/recommendations")
+def get_recruiter_recommendations(recruiter_id: int, db: Session = Depends(get_db)):
+    """Get all profiles sent to this recruiter by admin"""
+    recs = db.query(models.ProfileRecommendation).filter(
+        models.ProfileRecommendation.recruiter_id == recruiter_id
+    ).order_by(models.ProfileRecommendation.sent_at.desc()).all()
+
+    result = []
+    for r in recs:
+        student = r.student
+        skills = db.query(models.Skill).filter(
+            models.Skill.resume_id == student.id
+        ).all() if student else []
+
+        result.append({
+            "id": r.id,
+            "student_id": r.student_id,
+            "student_name": student.name if student else "Unknown",
+            "student_email": student.email if student else "",
+            "position_id": r.position_id,
+            "position_title": r.position.title if r.position else "Unknown",
+            "top_skills": [s.skill_name for s in skills[:5]],
+            "status": r.status,
+            "admin_notes": r.admin_notes,
+            "sent_at": r.sent_at
+        })
+
+    return result
+
+
+@app.get("/api/recruiter/recommendation/{rec_id}")
+def get_recommendation_detail(rec_id: int, db: Session = Depends(get_db)):
+    """Full candidate profile for a recommendation"""
+    r = db.query(models.ProfileRecommendation).filter(
+        models.ProfileRecommendation.id == rec_id
+    ).first()
+    if not r:
+        raise HTTPException(status_code=404, detail="Recommendation not found")
+
+    student = r.student
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    skills = db.query(models.Skill).filter(models.Skill.resume_id == student.id).all()
+    tests = db.query(models.TestSummary).filter(models.TestSummary.resume_id == student.id).all()
+
+    return {
+        "id": r.id,
+        "status": r.status,
+        "admin_notes": r.admin_notes,
+
+        "student_name": student.name,
+        "student_email": student.email,
+        "phone": student.phone,
+        "location": student.location,
+        "education": student.education or student.degree,
+        "graduation_year": student.year_of_passout,
+        "experience": student.experience,
+        "about": student.about,
+        "linkedin_url": student.linkedin_url,
+        "github_url": student.github_url,
+        "portfolio_url": student.portfolio_url,
+        "courses": student.courses,
+        "certifications": student.certifications,
+        "projects": student.projects,
+
+        "skills": [
+            {"skill_name": s.skill_name, "rating": s.rating, "level": s.rating_level}
+            for s in skills
+        ],
+        "assessments": [
+            {"skill": t.skill_name, "score": t.score_percentage, "status": t.result_status}
+            for t in tests
+        ],
+
+        "position_title": r.position.title if r.position else None
+    }
+
+
+@app.put("/api/recruiter/recommendation/{rec_id}/viewed")
+def mark_viewed(rec_id: int, db: Session = Depends(get_db)):
+    r = db.query(models.ProfileRecommendation).filter(
+        models.ProfileRecommendation.id == rec_id
+    ).first()
+    if not r:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    if r.status == "sent":
+        r.status = "viewed"
+        r.viewed_at = datetime.now(timezone.utc)
+        db.commit()
+
+    return {"message": "Marked viewed", "status": r.status}
+
+
+@app.put("/api/recruiter/recommendation/{rec_id}/status")
+def update_recommendation_status(rec_id: int, data: dict, db: Session = Depends(get_db)):
+    """Update status: shortlisted, interview, selected, rejected, etc."""
+    valid = {"viewed", "shortlisted", "interview", "selected", "offered", "joined", "rejected"}
+    new_status = data.get("status")
+
+    if new_status not in valid:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Allowed: {valid}")
+
+    r = db.query(models.ProfileRecommendation).filter(
+        models.ProfileRecommendation.id == rec_id
+    ).first()
+    if not r:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    r.status = new_status
+    if new_status == "shortlisted":
+        r.shortlisted_at = datetime.now(timezone.utc)
+
+    db.commit()
+    return {"message": "Status updated", "status": r.status}
+
+
+@app.put("/api/recruiter/recommendation/{rec_id}/feedback")
+def submit_feedback(rec_id: int, data: dict, db: Session = Depends(get_db)):
+    """Recruiter submits structured feedback"""
+    r = db.query(models.ProfileRecommendation).filter(
+        models.ProfileRecommendation.id == rec_id
+    ).first()
+    if not r:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    r.technical_rating = data.get("technical_rating")
+    r.communication_rating = data.get("communication_rating")
+    r.relevance = data.get("relevance")
+    r.next_action = data.get("next_action")
+    r.recruiter_feedback = data.get("comments")
+
+    db.commit()
+    return {"message": "Feedback submitted"}
 
 @app.get("/api/health")
 def health_check():

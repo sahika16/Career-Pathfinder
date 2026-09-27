@@ -403,7 +403,7 @@ function AdminTrainers({ user, onLogout }) {
       <div className="max-w-7xl mx-auto pt-28 px-6 pb-12">
         <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Trainer Management</h1>
             <p className="text-gray-500">Manage trainers, content, and courses</p>
           </div>
           <button

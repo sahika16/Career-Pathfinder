@@ -7,13 +7,10 @@ import API_BASE_URL from '../../config'
 function AdminDashboard({ user, onLogout }) {
   const navigate = useNavigate()
   const [stats, setStats] = useState({
-    questions: 0,
-    skills: 0,
     students: 0,
     trainers: 0,
     institutes: 0,
-    pendingInstitutes: 0,
-    testsCompleted: 0
+    recruiters: 0,
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -26,43 +23,42 @@ function AdminDashboard({ user, onLogout }) {
     try {
       setLoading(true)
       setError(null)
-      
-      const questions = await getAllQuestions()
-      const skills = await getAllSkillNames()
+
       const resumes = await getAllResumes()
-      
       const students = resumes.filter(r => r.role === 'student' || !r.role)
       const trainers = resumes.filter(r => r.role === 'trainer')
-      const testsDone = resumes.filter(r => r.test_completed === true).length
 
-      // Fetch institutes data
+      // Fetch institutes count
       let totalInstitutes = 0
-      let pendingInstitutes = 0
       try {
         const instRes = await fetch(`${API_BASE_URL}/admin/institutes`)
         if (instRes.ok) {
           const institutes = await instRes.json()
           totalInstitutes = institutes.length
         }
-        const pendingRes = await fetch(`${API_BASE_URL}/admin/institutes/pending`)
-        if (pendingRes.ok) {
-          const pending = await pendingRes.json()
-          pendingInstitutes = pending.length
-        }
       } catch (e) {
         console.error('Error fetching institute stats:', e)
       }
-      
+
+      // Fetch recruiters count
+      let totalRecruiters = 0
+      try {
+        const recRes = await fetch(`${API_BASE_URL}/admin/recruiters`)
+        if (recRes.ok) {
+          const recruiters = await recRes.json()
+          totalRecruiters = recruiters.length
+        }
+      } catch (e) {
+        console.error('Error fetching recruiter stats:', e)
+      }
+
       setStats({
-        questions: questions.length || 0,
-        skills: skills.skills ? skills.skills.length : 0,
         students: students.length || 0,
         trainers: trainers.length || 0,
         institutes: totalInstitutes,
-        pendingInstitutes: pendingInstitutes,
-        testsCompleted: testsDone || 0
+        recruiters: totalRecruiters,
       })
-      
+
     } catch (err) {
       console.error('Error fetching stats:', err)
       setError('Failed to load dashboard data.')
@@ -92,7 +88,7 @@ function AdminDashboard({ user, onLogout }) {
   return (
     <div className="min-h-screen bg-gray-100">
       <Navbar user={user} onLogout={onLogout} />
-      
+
       <div className="max-w-7xl mx-auto pt-28 px-6 pb-12">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
@@ -108,71 +104,47 @@ function AdminDashboard({ user, onLogout }) {
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-5 mb-8">
-          <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
-            <p className="text-sm font-medium text-gray-500">Total Questions</p>
-            <p className="text-3xl font-bold text-blue-600 mt-1">{stats.questions}</p>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
-            <p className="text-sm font-medium text-gray-500">Skills</p>
-            <p className="text-3xl font-bold text-purple-600 mt-1">{stats.skills}</p>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
+        {/* Stats Row — 4 cards, evenly spaced */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200">
             <p className="text-sm font-medium text-gray-500">Learners</p>
-            <p className="text-3xl font-bold text-green-600 mt-1">{stats.students}</p>
+            <p className="text-4xl font-bold text-green-600 mt-2">{stats.students}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
+          <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200">
             <p className="text-sm font-medium text-gray-500">Trainers</p>
-            <p className="text-3xl font-bold text-orange-600 mt-1">{stats.trainers}</p>
+            <p className="text-4xl font-bold text-orange-600 mt-2">{stats.trainers}</p>
           </div>
-          <div 
+          <div
             onClick={() => goTo('/admin/institutes')}
-            className="bg-white rounded-xl shadow-sm p-5 border border-gray-200 cursor-pointer hover:shadow-md transition"
+            className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200 cursor-pointer hover:shadow-md transition"
           >
             <p className="text-sm font-medium text-gray-500">Institutes</p>
-            <p className="text-3xl font-bold text-pink-600 mt-1">{stats.institutes}</p>
-            {stats.pendingInstitutes > 0 && (
-              <p className="text-xs text-red-600 mt-1 font-medium">
-                {stats.pendingInstitutes} pending
-              </p>
-            )}
+            <p className="text-4xl font-bold text-pink-600 mt-2">{stats.institutes}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
-            <p className="text-sm font-medium text-gray-500">Tests Completed</p>
-            <p className="text-3xl font-bold text-emerald-600 mt-1">{stats.testsCompleted}</p>
+          <div
+            onClick={() => goTo('/admin/recruiters')}
+            className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200 cursor-pointer hover:shadow-md transition"
+          >
+            <p className="text-sm font-medium text-gray-500">Recruiters</p>
+            <p className="text-4xl font-bold text-teal-600 mt-2">{stats.recruiters}</p>
           </div>
         </div>
 
+        {/* Action Cards — 4 cards, nice size */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div 
-            onClick={() => goTo('/admin/skills')}
-            className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 hover:shadow-md transition cursor-pointer group"
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-2xl text-blue-600">
-                📚
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-800">Skills Management</h3>
-                <p className="text-sm text-gray-500">View skills and questions</p>
-              </div>
-            </div>
-            <div className="text-blue-600 font-medium text-sm group-hover:underline">
-              View Skills →
-            </div>
-          </div>
 
-          <div 
+          {/* Learners */}
+          <div
             onClick={() => goTo('/admin/students')}
-            className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 hover:shadow-md transition cursor-pointer group"
+            className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200 hover:shadow-md transition cursor-pointer group"
           >
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center text-2xl text-green-600">
+            <div className="flex items-center gap-4 mb-3">
+              <div className="w-14 h-14 bg-green-50 rounded-2xl flex items-center justify-center text-3xl text-green-600">
                 👨‍🎓
               </div>
               <div>
-                <h3 className="font-semibold text-gray-800">Learner Management</h3>
-                <p className="text-sm text-gray-500">View learners and progress</p>
+                <h3 className="font-bold text-gray-800 text-lg">Learner Management</h3>
+                <p className="text-sm text-gray-500">View learners & progress</p>
               </div>
             </div>
             <div className="text-blue-600 font-medium text-sm group-hover:underline">
@@ -180,16 +152,17 @@ function AdminDashboard({ user, onLogout }) {
             </div>
           </div>
 
-          <div 
+          {/* Trainers */}
+          <div
             onClick={() => goTo('/admin/trainers')}
-            className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 hover:shadow-md transition cursor-pointer group"
+            className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200 hover:shadow-md transition cursor-pointer group"
           >
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center text-2xl text-orange-600">
+            <div className="flex items-center gap-4 mb-3">
+              <div className="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center text-3xl text-orange-600">
                 👨‍🏫
               </div>
               <div>
-                <h3 className="font-semibold text-gray-800">Trainer Management</h3>
+                <h3 className="font-bold text-gray-800 text-lg">Trainer Management</h3>
                 <p className="text-sm text-gray-500">View and approve trainers</p>
               </div>
             </div>
@@ -198,29 +171,66 @@ function AdminDashboard({ user, onLogout }) {
             </div>
           </div>
 
-          <div 
+          {/* Institutes */}
+          <div
             onClick={() => goTo('/admin/institutes')}
-            className="bg-white rounded-xl shadow-sm p-6 border border-pink-200 hover:shadow-md transition cursor-pointer group relative"
+            className="bg-white rounded-2xl shadow-sm p-6 border border-pink-200 hover:shadow-md transition cursor-pointer group"
           >
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-12 h-12 bg-pink-50 rounded-xl flex items-center justify-center text-2xl text-pink-600">
+            <div className="flex items-center gap-4 mb-3">
+              <div className="w-14 h-14 bg-pink-50 rounded-2xl flex items-center justify-center text-3xl text-pink-600">
                 🏫
               </div>
               <div>
-                <h3 className="font-semibold text-gray-800">Institute Management</h3>
+                <h3 className="font-bold text-gray-800 text-lg">Institute Management</h3>
                 <p className="text-sm text-gray-500">Review & approve institutes</p>
               </div>
             </div>
-            <div className="text-pink-600 font-medium text-sm group-hover:underline">
+            <div className="text-blue-600 font-medium text-sm group-hover:underline">
               Manage Institutes →
             </div>
-            {stats.pendingInstitutes > 0 && (
-              <span className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-                {stats.pendingInstitutes}
-              </span>
-            )}
+          </div>
+
+          {/* Recruiters */}
+          <div
+            onClick={() => goTo('/admin/recruiters')}
+            className="bg-white rounded-2xl shadow-sm p-6 border border-teal-200 hover:shadow-md transition cursor-pointer group"
+          >
+            <div className="flex items-center gap-4 mb-3">
+              <div className="w-14 h-14 bg-teal-50 rounded-2xl flex items-center justify-center text-3xl text-teal-600">
+                💼
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-800 text-lg">Recruiter Management</h3>
+                <p className="text-sm text-gray-500">Approve and manage recruiters</p>
+              </div>
+            </div>
+            <div className="text-blue-600 font-medium text-sm group-hover:underline">
+              Manage Recruiters →
+            </div>
+          </div>
+
+        </div>
+
+         <div className="mt-8">
+          <div
+            onClick={() => goTo('/admin/skills')}
+            className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200 hover:shadow-md transition cursor-pointer group flex items-center justify-between max-w-md"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-3xl text-blue-600">
+                📚
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-800 text-lg">Skills Management</h3>
+                <p className="text-sm text-gray-500">View skills & questions</p>
+              </div>
+            </div>
+            <div className="text-blue-600 font-medium text-sm group-hover:underline pr-2">
+              →
+            </div>
           </div>
         </div>
+
       </div>
     </div>
   )

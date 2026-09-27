@@ -64,6 +64,12 @@ function RoleDropdown() {
           >
             <span>Admin</span>
           </button>
+          <button 
+            onClick={() => handleRoleSelect('recruiter')} 
+            className="w-full px-5 py-3.5 text-left text-sm text-gray-700 hover:bg-green-50 transition font-medium flex items-center space-x-3 border-b border-gray-100"
+          >
+          <span>Recruiter</span>
+          </button>
         </div>
       )}
     </div>

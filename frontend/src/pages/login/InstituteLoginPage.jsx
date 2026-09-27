@@ -9,11 +9,7 @@ function InstituteLoginPage({ onLogin }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [showPassword, setShowPassword] = useState(false)
-
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  })
+  const [formData, setFormData] = useState({ email: '', password: '' })
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
@@ -27,6 +23,24 @@ function InstituteLoginPage({ onLogin }) {
 
       const response = await axios.post(`${API_BASE_URL}/institute/login`, formData)
       const data = response.data
+
+      if (!data.is_approved || data.status === 'pending_approval') {
+        setError('Your account is pending admin approval. You will be able to login once approved.')
+        setLoading(false)
+        return
+      }
+
+      if (data.status === 'rejected') {
+        setError('Your registration was rejected. Please contact support for more information.')
+        setLoading(false)
+        return
+      }
+
+      if (data.status === 'suspended') {
+        setError('Your account has been suspended. Please contact support.')
+        setLoading(false)
+        return
+      }
 
       const userData = {
         id: data.id,
@@ -49,10 +63,6 @@ function InstituteLoginPage({ onLogin }) {
     }
   }
 
-  const handleRegisterRedirect = () => {
-    navigate('/institute/register')
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <Navbar />
@@ -66,17 +76,12 @@ function InstituteLoginPage({ onLogin }) {
         </button>
 
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-          {/* Header */}
           <div className="text-center mb-8">
             <div className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-1 rounded-full text-sm font-bold uppercase tracking-wider">
               Institute Login
             </div>
-            <h1 className="text-3xl font-extrabold text-gray-900 mt-4">
-              Welcome!
-            </h1>
-            <p className="text-gray-600 mt-2">
-              Enter your credentials to continue
-            </p>
+            <h1 className="text-3xl font-extrabold text-gray-900 mt-4">Welcome!</h1>
+            <p className="text-gray-600 mt-2">Enter your credentials to continue</p>
           </div>
 
           {error && (
@@ -87,9 +92,7 @@ function InstituteLoginPage({ onLogin }) {
 
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
               <input
                 type="email"
                 name="email"
@@ -102,9 +105,7 @@ function InstituteLoginPage({ onLogin }) {
             </div>
 
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Password
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -138,7 +139,7 @@ function InstituteLoginPage({ onLogin }) {
             <p className="text-sm text-gray-500">
               Don't have an account?{' '}
               <button
-                onClick={handleRegisterRedirect}
+                onClick={() => navigate('/institute/register')}
                 className="text-blue-600 hover:text-blue-800 font-medium transition"
               >
                 Register as Institute/Partner
