@@ -5,9 +5,33 @@ import axios from 'axios'
 import API_BASE_URL from '../../config'
 import imageCompression from 'browser-image-compression'
 
-function PersonalizedTrainerDashboard({ user, onLogout }) {
+function PersonalizedTrainerDashboard({ user: userProp, onLogout }) {
   const navigate = useNavigate()
+
+  const resolveUser = () => {
+    if (userProp && userProp.id) return userProp
+    try {
+      const stored = sessionStorage.getItem('careerUser')
+      if (stored) return JSON.parse(stored)
+    } catch (e) {
+      console.error('Failed to parse stored user', e)
+    }
+    return null
+  }
+
+  const [user, setUser] = useState(resolveUser)
+
+  useEffect(() => {
+    if (userProp && userProp.id) {
+      setUser(userProp)
+    } else if (!user) {
+      const resolved = resolveUser()
+      if (resolved) setUser(resolved)
+    }
+  }, [userProp])
+
   const [students, setStudents] = useState([])
+  const [studentsLoaded, setStudentsLoaded] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showAddStudent, setShowAddStudent] = useState(false)
   const [error, setError] = useState(null)
@@ -17,8 +41,8 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
   const [filterLevel, setFilterLevel] = useState('all')
   const isMounted = useRef(true)
 
-  // Content states
   const [contents, setContents] = useState([])
+  const [contentsLoaded, setContentsLoaded] = useState(false)
   const [showAddContent, setShowAddContent] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState('')
@@ -72,15 +96,10 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
   useEffect(() => {
     isMounted.current = true
     if (user && user.id) {
-      Promise.all([
-        fetchStudents(),
-        fetchTrainerSettings(),
-        fetchContents()
-      ]).finally(() => {
-        if (isMounted.current) {
-          setLoading(false)
-        }
-      })
+      setLoading(false)
+      fetchStudents()
+      fetchTrainerSettings()
+      fetchContents()
     } else {
       setLoading(false)
     }
@@ -98,12 +117,14 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
       )
       if (isMounted.current) {
         setStudents(response.data || [])
+        setStudentsLoaded(true)
         setError(null)
       }
     } catch (err) {
       console.error('Error fetching students:', err)
       if (isMounted.current) {
         setStudents([])
+        setStudentsLoaded(true)
         setError('Could not load students. Please refresh.')
       }
     }
@@ -117,11 +138,13 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
       )
       if (isMounted.current) {
         setContents(response.data || [])
+        setContentsLoaded(true)
       }
     } catch (err) {
       console.error('Error fetching contents:', err)
       if (isMounted.current) {
         setContents([])
+        setContentsLoaded(true)
       }
     }
   }
@@ -556,26 +579,6 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
 
       await axios.put(`${API_BASE_URL}/trainer/settings/${user.id}`, settingsData, { timeout: 15000 })
       setSuccess('Profile saved successfully!')
-
-      setTrainerSettings({
-        available_days: [],
-        available_time_start: '',
-        available_time_end: '',
-        about: '',
-        expertise: '',
-        qualifications: '',
-        hourly_rate: '',
-        skills_taught: ''
-      })
-      setAvailability({
-        available_days: [],
-        available_time_start: '',
-        available_time_end: '',
-        hourly_rate: 0,
-        skills_offered: []
-      })
-      setSkillInput('')
-
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to save profile')
@@ -626,6 +629,12 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
             <p className="mt-4 text-gray-600">Loading user data...</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-4 text-sm text-purple-600 hover:underline"
+            >
+              Taking too long? Click to refresh
+            </button>
           </div>
         </div>
       </div>
@@ -675,23 +684,27 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
             <p className="text-sm text-gray-500">Total Students</p>
-            <p className="text-2xl font-bold text-purple-600">{students.length}</p>
+            <p className="text-2xl font-bold text-purple-600">
+              {studentsLoaded ? students.length : '...'}
+            </p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
             <p className="text-sm text-gray-500">Active Sessions</p>
             <p className="text-2xl font-bold text-green-600">
-              {students.filter(s => s.status === 'active').length}
+              {studentsLoaded ? students.filter(s => s.status === 'active').length : '...'}
             </p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
             <p className="text-sm text-gray-500">Pending</p>
             <p className="text-2xl font-bold text-yellow-600">
-              {students.filter(s => s.status === 'pending').length}
+              {studentsLoaded ? students.filter(s => s.status === 'pending').length : '...'}
             </p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
             <p className="text-sm text-gray-500">Content</p>
-            <p className="text-2xl font-bold text-blue-600">{contents.length}</p>
+            <p className="text-2xl font-bold text-blue-600">
+              {contentsLoaded ? contents.length : '...'}
+            </p>
           </div>
         </div>
 
@@ -699,7 +712,9 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
           {levels.map((level) => (
             <div key={level} className="bg-white rounded-xl shadow-sm p-3 border border-gray-200 text-center">
               <p className="text-xs text-gray-500">{level}</p>
-              <p className="text-lg font-bold text-purple-600">{getLevelCount(level)}</p>
+              <p className="text-lg font-bold text-purple-600">
+                {studentsLoaded ? getLevelCount(level) : '...'}
+              </p>
               <p className="text-xs text-gray-400">students</p>
             </div>
           ))}
@@ -919,7 +934,12 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
                 <h2 className="text-lg font-bold text-gray-800">Your Coaching Students</h2>
                 <span className="text-sm text-gray-500">{filteredStudents.length} students</span>
               </div>
-              {filteredStudents.length === 0 ? (
+              {!studentsLoaded ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+                  <p className="text-gray-500 mt-3">Loading students...</p>
+                </div>
+              ) : filteredStudents.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-gray-500 text-lg">No coaching students assigned yet.</p>
                   <p className="text-gray-400 text-sm mt-1">Click "Assign New Student" to start coaching.</p>
@@ -1162,7 +1182,12 @@ function PersonalizedTrainerDashboard({ user, onLogout }) {
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-              {contents.length === 0 ? (
+              {!contentsLoaded ? (
+                <div className="col-span-full text-center py-16 bg-white rounded-xl shadow-sm border border-gray-200">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+                  <p className="text-gray-500 mt-3">Loading content...</p>
+                </div>
+              ) : contents.length === 0 ? (
                 <div className="col-span-full text-center py-16 bg-white rounded-xl shadow-sm border border-gray-200">
                   <p className="text-gray-500 text-xl">No content added yet.</p>
                   <p className="text-gray-400 mt-2">Click "Add Content" to create your first material.</p>

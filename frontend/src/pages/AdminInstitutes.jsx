@@ -54,26 +54,23 @@ function AdminInstitutes({ user, onLogout }) {
   }, [searchTerm, institutes])
 
   const fetchAllData = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      await Promise.all([
-        fetchInstitutes(),
-        fetchPendingInstitutes(),
-        fetchPendingCourses(),
-        fetchAllCourses()
-      ])
-    } catch (err) {
-      setError('Failed to load data. Please try again.')
-    } finally {
-      setLoading(false)
-    }
+    setLoading(false)
+    setError(null)
+
+    fetchInstitutes()
+    fetchPendingInstitutes()
+    fetchPendingCourses()
+    fetchAllCourses()
   }
 
   const fetchInstitutes = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/admin/institutes`)
-      if (!response.ok) throw new Error('Failed to fetch institutes')
+      if (!response.ok) {
+        setInstitutes([])
+        setFilteredInstitutes([])
+        return
+      }
       const data = await response.json()
       setInstitutes(data)
       setFilteredInstitutes(data)
@@ -86,6 +83,8 @@ function AdminInstitutes({ user, onLogout }) {
       setStats(prev => ({ ...prev, total, approved, pending, rejected }))
     } catch (err) {
       console.error('Error fetching institutes:', err)
+      setInstitutes([])
+      setFilteredInstitutes([])
     }
   }
 
@@ -117,20 +116,28 @@ function AdminInstitutes({ user, onLogout }) {
   const fetchAllCourses = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/admin/institutes`)
-      if (response.ok) {
-        const instList = await response.json()
-        const all = []
-        for (const inst of instList) {
+      if (!response.ok) return
+
+      const instList = await response.json()
+
+      const results = await Promise.all(
+        instList.map(async (inst) => {
           try {
             const cr = await fetch(`${API_BASE_URL}/institute/courses/${inst.id}`)
-            if (cr.ok) {
-              const courses = await cr.json()
-              courses.forEach(c => all.push({ ...c, institute_name: inst.institute_name, institute_id: inst.id }))
-            }
-          } catch (e) {}
-        }
-        setAllCourses(all)
-      }
+            if (!cr.ok) return []
+            const courses = await cr.json()
+            return courses.map(c => ({
+              ...c,
+              institute_name: inst.institute_name,
+              institute_id: inst.id
+            }))
+          } catch (e) {
+            return []
+          }
+        })
+      )
+
+      setAllCourses(results.flat())
     } catch (err) {
       console.error('Error fetching all courses:', err)
     }
@@ -145,14 +152,9 @@ function AdminInstitutes({ user, onLogout }) {
         fetch(`${API_BASE_URL}/institute/enrollments/${instituteId}`)
       ])
 
-      if (coursesRes.ok) setInstituteCourses(await coursesRes.json())
-      else setInstituteCourses([])
-
-      if (batchesRes.ok) setInstituteBatches(await batchesRes.json())
-      else setInstituteBatches([])
-
-      if (enrollmentsRes.ok) setInstituteEnrollments(await enrollmentsRes.json())
-      else setInstituteEnrollments([])
+      setInstituteCourses(coursesRes.ok ? await coursesRes.json() : [])
+      setInstituteBatches(batchesRes.ok ? await batchesRes.json() : [])
+      setInstituteEnrollments(enrollmentsRes.ok ? await enrollmentsRes.json() : [])
     } catch (err) {
       console.error('Error fetching institute details:', err)
       setInstituteCourses([])
@@ -284,7 +286,6 @@ function AdminInstitutes({ user, onLogout }) {
       <Navbar user={user} onLogout={onLogout} />
 
       <div className="max-w-7xl mx-auto pt-28 px-6 pb-12">
-        {/* Header with Back button on RIGHT (same as trainers) */}
         <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Institute Management</h1>
@@ -301,7 +302,6 @@ function AdminInstitutes({ user, onLogout }) {
           </button>
         </div>
 
-        {/* Messages - same style as trainers */}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-6">
             {error}
@@ -319,7 +319,6 @@ function AdminInstitutes({ user, onLogout }) {
           </div>
         )}
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
             <p className="text-sm text-gray-500">Total</p>
@@ -346,7 +345,6 @@ function AdminInstitutes({ user, onLogout }) {
           </div>
         </div>
 
-        {/* Tabs - blue accent same as trainers */}
         <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200">
           <button
             onClick={() => setApprovalTab('pending')}
@@ -390,7 +388,6 @@ function AdminInstitutes({ user, onLogout }) {
           </button>
         </div>
 
-        {/* TAB: PENDING INSTITUTES */}
         {approvalTab === 'pending' && (
           <div>
             {pendingInstitutes.length === 0 ? (
@@ -460,7 +457,6 @@ function AdminInstitutes({ user, onLogout }) {
           </div>
         )}
 
-        {/* TAB: ALL INSTITUTES */}
         {approvalTab === 'all' && (
           <>
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
@@ -556,7 +552,6 @@ function AdminInstitutes({ user, onLogout }) {
           </>
         )}
 
-        {/* TAB: COURSES */}
         {approvalTab === 'courses' && (
           <div>
             {pendingCourses.length > 0 && (
@@ -660,7 +655,6 @@ function AdminInstitutes({ user, onLogout }) {
         )}
       </div>
 
-      {/* Institute Detail Modal */}
       {showDetails && selectedInstitute && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">

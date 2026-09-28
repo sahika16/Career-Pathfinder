@@ -5,9 +5,9 @@ import API_BASE_URL from '../config'
 
 function AdminTrainers({ user, onLogout }) {
   const navigate = useNavigate()
-  
-  // Trainer states
+
   const [trainers, setTrainers] = useState([])
+  const [trainersLoaded, setTrainersLoaded] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
@@ -18,14 +18,13 @@ function AdminTrainers({ user, onLogout }) {
   const [trainerSessions, setTrainerSessions] = useState([])
   const [loadingContent, setLoadingContent] = useState(false)
   const [activeTab, setActiveTab] = useState('details')
-  
-  // Approval states
+
   const [pendingContent, setPendingContent] = useState([])
   const [pendingCourses, setPendingCourses] = useState([])
   const [allContent, setAllContent] = useState([])
   const [allCourses, setAllCourses] = useState([])
   const [approvalTab, setApprovalTab] = useState('trainers')
-  
+
   const [stats, setStats] = useState({
     trainers: 0,
     approved: 0,
@@ -37,12 +36,13 @@ function AdminTrainers({ user, onLogout }) {
   })
 
   useEffect(() => {
+    setLoading(false)
     fetchAllData()
   }, [])
 
   useEffect(() => {
     if (searchTerm) {
-      const filtered = trainers.filter(t => 
+      const filtered = trainers.filter(t =>
         (t.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
         (t.email?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
         (t.phone || '').includes(searchTerm) ||
@@ -58,52 +58,42 @@ function AdminTrainers({ user, onLogout }) {
   }, [searchTerm, trainers])
 
   const fetchAllData = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      
-      await Promise.all([
-        fetchTrainers(),
-        fetchPendingContent(),
-        fetchPendingCourses(),
-        fetchAllContent(),
-        fetchAllCourses()
-      ])
-      
-    } catch (err) {
-      setError('Failed to load data. Please try again.')
-    } finally {
-      setLoading(false)
-    }
+    setError(null)
+    fetchTrainers()
+    fetchPendingContent()
+    fetchPendingCourses()
+    fetchAllContent()
+    fetchAllCourses()
   }
 
   const fetchTrainers = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/admin/trainers`)
       if (!response.ok) throw new Error('Failed to fetch trainers')
-      
+
       const data = await response.json()
       setTrainers(data)
       setFilteredTrainers(data)
-      
+      setTrainersLoaded(true)
+
       const trainersOnly = data.filter(t => t.role === 'trainer')
       const totalTrainers = trainersOnly.length
       const approved = trainersOnly.filter(t => t.is_approved === true).length
       const pending = trainersOnly.filter(t => t.is_approved === false && t.status === 'pending_approval').length
       const regular = trainersOnly.filter(t => t.category === 'regular').length
       const personalized = trainersOnly.filter(t => t.category === 'personalized').length
-      
-      setStats(prev => ({ 
+
+      setStats(prev => ({
         ...prev,
         trainers: totalTrainers,
-        approved, 
-        pending, 
-        regular, 
-        personalized 
+        approved,
+        pending,
+        regular,
+        personalized
       }))
-      
     } catch (err) {
       console.error('Error fetching trainers:', err)
+      setTrainersLoaded(true)
     }
   }
 
@@ -193,15 +183,15 @@ function AdminTrainers({ user, onLogout }) {
 
   const handleApprove = async (trainerId) => {
     if (!window.confirm('Approve this trainer?')) return
-    
+
     try {
       const response = await fetch(`${API_BASE_URL}/admin/approve-trainer/${trainerId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       })
-      
+
       if (!response.ok) throw new Error('Failed to approve trainer')
-      
+
       await response.json()
       fetchTrainers()
     } catch (err) {
@@ -211,15 +201,15 @@ function AdminTrainers({ user, onLogout }) {
 
   const handleReject = async (trainerId) => {
     if (!window.confirm('Reject this trainer?')) return
-    
+
     try {
       const response = await fetch(`${API_BASE_URL}/admin/reject-trainer/${trainerId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       })
-      
+
       if (!response.ok) throw new Error('Failed to reject trainer')
-      
+
       await response.json()
       fetchTrainers()
     } catch (err) {
@@ -227,7 +217,6 @@ function AdminTrainers({ user, onLogout }) {
     }
   }
 
-  // ✅ Content approval - direct approve, no modal
   const handleApproveContent = async (contentId) => {
     if (!window.confirm('Approve this content?')) return
 
@@ -236,9 +225,9 @@ function AdminTrainers({ user, onLogout }) {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       })
-      
+
       if (!response.ok) throw new Error('Failed to approve content')
-      
+
       await response.json()
       fetchPendingContent()
       fetchAllContent()
@@ -250,16 +239,16 @@ function AdminTrainers({ user, onLogout }) {
   const handleRejectContent = async (contentId) => {
     const reason = prompt('Please provide a reason for rejection:')
     if (reason === null) return
-    
+
     try {
       const response = await fetch(`${API_BASE_URL}/admin/content/${contentId}/reject`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ admin_notes: reason })
       })
-      
+
       if (!response.ok) throw new Error('Failed to reject content')
-      
+
       await response.json()
       fetchPendingContent()
       fetchAllContent()
@@ -268,7 +257,6 @@ function AdminTrainers({ user, onLogout }) {
     }
   }
 
-  // ✅ Course approval - direct approve, no modal
   const handleApproveCourse = async (courseId) => {
     if (!window.confirm('Approve this course?')) return
 
@@ -277,9 +265,9 @@ function AdminTrainers({ user, onLogout }) {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       })
-      
+
       if (!response.ok) throw new Error('Failed to approve course')
-      
+
       await response.json()
       fetchPendingCourses()
       fetchAllCourses()
@@ -291,16 +279,16 @@ function AdminTrainers({ user, onLogout }) {
   const handleRejectCourse = async (courseId) => {
     const reason = prompt('Please provide a reason for rejection:')
     if (reason === null) return
-    
+
     try {
       const response = await fetch(`${API_BASE_URL}/admin/courses/${courseId}/reject`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ admin_notes: reason })
       })
-      
+
       if (!response.ok) throw new Error('Failed to reject course')
-      
+
       await response.json()
       fetchPendingCourses()
       fetchAllCourses()
@@ -382,24 +370,10 @@ function AdminTrainers({ user, onLogout }) {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar user={user} onLogout={onLogout} />
-        <div className="flex items-center justify-center h-screen">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading...</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="min-h-screen bg-gray-100">
       <Navbar user={user} onLogout={onLogout} />
-      
+
       <div className="max-w-7xl mx-auto pt-28 px-6 pb-12">
         <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
           <div>
@@ -426,19 +400,24 @@ function AdminTrainers({ user, onLogout }) {
           </div>
         )}
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
             <p className="text-sm text-gray-500">Total Trainers</p>
-            <p className="text-2xl font-bold text-purple-600">{stats.trainers}</p>
+            <p className="text-2xl font-bold text-purple-600">
+              {trainersLoaded ? stats.trainers : '...'}
+            </p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
             <p className="text-sm text-gray-500">Approved</p>
-            <p className="text-2xl font-bold text-green-600">{stats.approved}</p>
+            <p className="text-2xl font-bold text-green-600">
+              {trainersLoaded ? stats.approved : '...'}
+            </p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
             <p className="text-sm text-gray-500">Pending Trainers</p>
-            <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
+            <p className="text-2xl font-bold text-yellow-600">
+              {trainersLoaded ? stats.pending : '...'}
+            </p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200 cursor-pointer hover:shadow-md transition"
                onClick={() => setApprovalTab('content')}>
@@ -452,13 +431,12 @@ function AdminTrainers({ user, onLogout }) {
           </div>
         </div>
 
-        {/* Tab Navigation */}
         <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200">
           <button
             onClick={() => setApprovalTab('trainers')}
             className={`px-4 py-2.5 text-sm font-medium transition border-b-2 ${
-              approvalTab === 'trainers' 
-                ? 'border-blue-600 text-blue-600' 
+              approvalTab === 'trainers'
+                ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -467,8 +445,8 @@ function AdminTrainers({ user, onLogout }) {
           <button
             onClick={() => setApprovalTab('content')}
             className={`px-4 py-2.5 text-sm font-medium transition border-b-2 ${
-              approvalTab === 'content' 
-                ? 'border-blue-600 text-blue-600' 
+              approvalTab === 'content'
+                ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -481,8 +459,8 @@ function AdminTrainers({ user, onLogout }) {
           <button
             onClick={() => setApprovalTab('courses')}
             className={`px-4 py-2.5 text-sm font-medium transition border-b-2 ${
-              approvalTab === 'courses' 
-                ? 'border-blue-600 text-blue-600' 
+              approvalTab === 'courses'
+                ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -494,7 +472,6 @@ function AdminTrainers({ user, onLogout }) {
           </button>
         </div>
 
-        {/* TAB: TRAINERS */}
         {approvalTab === 'trainers' && (
           <>
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
@@ -515,7 +492,12 @@ function AdminTrainers({ user, onLogout }) {
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="overflow-x-auto">
-                {filteredTrainers.length === 0 ? (
+                {!trainersLoaded ? (
+                  <div className="text-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="text-gray-500 mt-3">Loading trainers...</p>
+                  </div>
+                ) : filteredTrainers.length === 0 ? (
                   <div className="text-center py-12">
                     <p className="text-gray-500">No trainers found.</p>
                   </div>
@@ -537,7 +519,7 @@ function AdminTrainers({ user, onLogout }) {
                       {filteredTrainers.map((trainer) => (
                         <tr key={trainer.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
                           <td className="px-4 py-3 text-sm font-mono text-blue-600">#{trainer.id}</td>
-                          <td 
+                          <td
                             className="px-4 py-3 text-sm font-medium text-blue-600 cursor-pointer hover:text-blue-800 hover:underline"
                             onClick={() => handleNameClick(trainer)}
                           >
@@ -563,7 +545,6 @@ function AdminTrainers({ user, onLogout }) {
           </>
         )}
 
-        {/* TAB: CONTENT */}
         {approvalTab === 'content' && (
           <div>
             {pendingContent.length > 0 && (
@@ -681,7 +662,6 @@ function AdminTrainers({ user, onLogout }) {
           </div>
         )}
 
-        {/* TAB: COURSES */}
         {approvalTab === 'courses' && (
           <div>
             {pendingCourses.length > 0 && (
@@ -814,7 +794,6 @@ function AdminTrainers({ user, onLogout }) {
         )}
       </div>
 
-      {/* Trainer Detail Modal */}
       {showDetails && selectedTrainer && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -945,10 +924,10 @@ function AdminTrainers({ user, onLogout }) {
                           <h4 className="font-semibold text-gray-800 text-sm mt-2">{content.title}</h4>
                           <p className="text-xs text-gray-500 mt-1 line-clamp-2">{content.description}</p>
                           {content.content_url && (
-                            <a 
-                              href={content.content_url} 
-                              target="_blank" 
-                              rel="noopener" 
+                            <a
+                              href={content.content_url}
+                              target="_blank"
+                              rel="noopener"
                               className="text-blue-600 hover:underline text-xs mt-2 inline-block"
                             >
                               View Content →

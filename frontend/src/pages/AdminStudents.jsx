@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
-import { getAllResumes, getSkills, getAllTestResults } from '../utils/api'
+import { getSkills, getAllTestResults } from '../utils/api'
 import axios from 'axios'
 import API_BASE_URL from '../config'
 
@@ -15,7 +15,9 @@ function AdminStudents({ user, onLogout }) {
   const [selectedStudent, setSelectedStudent] = useState(null)
   const [studentDetails, setStudentDetails] = useState(null)
   const [showDetails, setShowDetails] = useState(false)
-  const [filter, setFilter] = useState('all') // all, visible, hidden, pending
+  const [filter, setFilter] = useState('all')
+  const [toggling, setToggling] = useState(null)
+  const [toast, setToast] = useState(null)
 
   useEffect(() => {
     fetchStudents()
@@ -24,9 +26,8 @@ function AdminStudents({ user, onLogout }) {
   useEffect(() => {
     let filtered = students
 
-    // Apply search filter
     if (searchTerm) {
-      filtered = filtered.filter(s => 
+      filtered = filtered.filter(s =>
         (s.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
         (s.email?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
         (s.phone || '').includes(searchTerm) ||
@@ -34,7 +35,6 @@ function AdminStudents({ user, onLogout }) {
       )
     }
 
-    // Apply visibility filter
     if (filter === 'visible') {
       filtered = filtered.filter(s => s.is_visible_to_recruiters === true)
     } else if (filter === 'hidden') {
@@ -46,19 +46,31 @@ function AdminStudents({ user, onLogout }) {
     setFilteredStudents(filtered)
   }, [searchTerm, students, filter])
 
+  const showToast = (type, message, duration = 2500) => {
+    setToast({ type, message })
+    setTimeout(() => setToast(null), duration)
+  }
+
   const fetchStudents = async () => {
     try {
       setLoading(true)
       setError(null)
-      const data = await getAllResumes()
-      
-      // Filter ONLY students
-      const studentList = data.filter(s => 
-        s.role !== 'trainer' && 
+
+      const response = await axios.get(`${API_BASE_URL}/resumes`)
+      const data = Array.isArray(response.data) ? response.data : []
+
+      // Keep only student roles
+      const studentList = data.filter(s =>
+        s.role !== 'trainer' &&
         s.role !== 'admin' &&
+        s.role !== 'institute' &&
+        s.role !== 'recruiter' &&
         (s.role === 'student' || s.role === null || s.role === '' || s.role === undefined)
       )
-      
+
+      console.log('📊 Students loaded:', studentList.length)
+      console.log('✅ Visible:', studentList.filter(s => s.is_visible_to_recruiters).length)
+
       setStudents(studentList)
       setFilteredStudents(studentList)
     } catch (err) {
@@ -72,19 +84,18 @@ function AdminStudents({ user, onLogout }) {
   const fetchStudentDetails = async (student) => {
     try {
       setLoading(true)
-      
-      const skillsData = await getSkills(student.id)
-      const testResults = await getAllTestResults(student.id)
-      
-      // Get full profile
+
+      const skillsData = await getSkills(student.id).catch(() => [])
+      const testResults = await getAllTestResults(student.id).catch(() => [])
+
       let profileData = {}
       try {
         const profileRes = await axios.get(`${API_BASE_URL}/student/profile/${student.id}`)
-        profileData = profileRes.data
+        profileData = profileRes.data || {}
       } catch (e) {
         console.log('Profile not found, using basic data')
       }
-      
+
       setStudentDetails({
         ...student,
         ...profileData,
@@ -95,42 +106,80 @@ function AdminStudents({ user, onLogout }) {
       setShowDetails(true)
     } catch (err) {
       console.error('Error fetching student details:', err)
-      alert('Failed to load student details.')
+      showToast('error', 'Failed to load student details')
     } finally {
       setLoading(false)
     }
   }
 
+  // ✅ Silent toggle: no confirm, no alert, optimistic UI, trust server response
   const toggleRecruiterVisibility = async (studentId, currentStatus) => {
     const newStatus = !currentStatus
-    const action = newStatus ? 'approve for recruiters' : 'hide from recruiters'
-    
-    if (!window.confirm(`Are you sure you want to ${action}?`)) return
-    
+
+    // ---- Optimistic update: flip the UI instantly ----
+    setStudents(prev =>
+      prev.map(s => s.id === studentId ? { ...s, is_visible_to_recruiters: newStatus } : s)
+    )
+    setFilteredStudents(prev =>
+      prev.map(s => s.id === studentId ? { ...s, is_visible_to_recruiters: newStatus } : s)
+    )
+    if (studentDetails?.id === studentId) {
+      setStudentDetails(prev => ({ ...prev, is_visible_to_recruiters: newStatus }))
+    }
+
     try {
+      setToggling(studentId)
+
       const response = await axios.put(
         `${API_BASE_URL}/admin/student/${studentId}/toggle-recruiter-visibility`,
-        { 
+        {
           is_visible_to_recruiters: newStatus,
           admin_notes: newStatus ? 'Approved by admin' : null
         }
       )
-      
-      // Update local state
-      setStudents(students.map(s => 
-        s.id === studentId 
-          ? { ...s, is_visible_to_recruiters: newStatus }
-          : s
-      ))
-      
-      if (studentDetails?.id === studentId) {
-        setStudentDetails({ ...studentDetails, is_visible_to_recruiters: newStatus })
+
+      console.log('✅ Toggle response:', response.data)
+
+      // ---- Sync with server value if it disagrees ----
+      const serverValue = response.data?.is_visible_to_recruiters
+      if (typeof serverValue === 'boolean' && serverValue !== newStatus) {
+        setStudents(prev =>
+          prev.map(s => s.id === studentId ? { ...s, is_visible_to_recruiters: serverValue } : s)
+        )
+        setFilteredStudents(prev =>
+          prev.map(s => s.id === studentId ? { ...s, is_visible_to_recruiters: serverValue } : s)
+        )
+        if (studentDetails?.id === studentId) {
+          setStudentDetails(prev => ({ ...prev, is_visible_to_recruiters: serverValue }))
+        }
       }
-      
-      alert(`Student ${newStatus ? 'approved for' : 'hidden from'} recruiters!`)
+
+      showToast(
+        'success',
+        newStatus ? 'Approved for recruiters' : 'Hidden from recruiters'
+      )
     } catch (err) {
       console.error('Error toggling visibility:', err)
-      alert('Failed to update visibility')
+
+      // ---- Revert on failure ----
+      setStudents(prev =>
+        prev.map(s => s.id === studentId ? { ...s, is_visible_to_recruiters: currentStatus } : s)
+      )
+      setFilteredStudents(prev =>
+        prev.map(s => s.id === studentId ? { ...s, is_visible_to_recruiters: currentStatus } : s)
+      )
+      if (studentDetails?.id === studentId) {
+        setStudentDetails(prev => ({ ...prev, is_visible_to_recruiters: currentStatus }))
+      }
+
+      const errMsg =
+        err.response?.data?.detail ||
+        err.response?.data?.message ||
+        err.message ||
+        'Failed to update visibility'
+      showToast('error', errMsg, 4000)
+    } finally {
+      setToggling(null)
     }
   }
 
@@ -168,12 +217,23 @@ function AdminStudents({ user, onLogout }) {
   return (
     <div className="min-h-screen bg-gray-100">
       <Navbar user={user} onLogout={onLogout} />
-      
+
+      {/* Toast */}
+      {toast && (
+        <div
+          className={`fixed top-24 right-6 z-[100] px-5 py-3 rounded-lg shadow-lg text-white text-sm font-medium transition-all ${
+            toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
+          }`}
+        >
+          {toast.message}
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto pt-28 px-6 pb-12">
         <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Student Management</h1>
-            <p className="text-gray-500">Review students and approve them for recruiters</p>
+            <h1 className="text-2xl font-bold text-gray-900">Learners Management</h1>
+            <p className="text-gray-500">Review learners and approve them for recruiters</p>
           </div>
           <button
             onClick={handleBack}
@@ -319,13 +379,16 @@ function AdminStudents({ user, onLogout }) {
                           </button>
                           <button
                             onClick={() => toggleRecruiterVisibility(student.id, student.is_visible_to_recruiters)}
-                            className={`text-sm font-medium px-3 py-1 rounded-lg transition ${
+                            disabled={toggling === student.id}
+                            className={`text-sm font-medium px-3 py-1 rounded-lg transition disabled:opacity-50 ${
                               student.is_visible_to_recruiters
                                 ? 'bg-red-50 text-red-600 hover:bg-red-100'
                                 : 'bg-green-50 text-green-600 hover:bg-green-100'
                             }`}
                           >
-                            {student.is_visible_to_recruiters ? 'Hide' : 'Approve'}
+                            {toggling === student.id
+                              ? '...'
+                              : student.is_visible_to_recruiters ? 'Hide' : 'Approve'}
                           </button>
                         </div>
                       </td>
@@ -379,13 +442,18 @@ function AdminStudents({ user, onLogout }) {
                   </div>
                   <button
                     onClick={() => toggleRecruiterVisibility(studentDetails.id, studentDetails.is_visible_to_recruiters)}
-                    className={`px-6 py-2 rounded-lg font-medium transition ${
+                    disabled={toggling === studentDetails.id}
+                    className={`px-6 py-2 rounded-lg font-medium transition disabled:opacity-50 ${
                       studentDetails.is_visible_to_recruiters
                         ? 'bg-red-500 text-white hover:bg-red-600'
                         : 'bg-green-500 text-white hover:bg-green-600'
                     }`}
                   >
-                    {studentDetails.is_visible_to_recruiters ? 'Hide from Recruiters' : 'Approve for Recruiters'}
+                    {toggling === studentDetails.id
+                      ? '...'
+                      : studentDetails.is_visible_to_recruiters
+                        ? 'Hide from Recruiters'
+                        : 'Approve for Recruiters'}
                   </button>
                 </div>
               </div>
@@ -470,8 +538,9 @@ function AdminStudents({ user, onLogout }) {
                             {result.score_percentage.toFixed(1)}%
                           </p>
                           <span className={`text-xs px-2 py-0.5 rounded-full ${
-                            result.result_status === 'Passed' ? 'bg-green-100 text-green-700' :
-                            'bg-red-100 text-red-700'
+                            result.result_status === 'Passed'
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-red-100 text-red-700'
                           }`}>
                             {result.result_status || 'N/A'}
                           </span>
@@ -512,19 +581,19 @@ function AdminStudents({ user, onLogout }) {
               <div className="flex gap-3 mt-6">
                 {studentDetails.linkedin_url && (
                   <a href={studentDetails.linkedin_url} target="_blank" rel="noopener noreferrer"
-                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
                     LinkedIn
                   </a>
                 )}
                 {studentDetails.github_url && (
                   <a href={studentDetails.github_url} target="_blank" rel="noopener noreferrer"
-                     className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition text-sm">
+                    className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition text-sm">
                     GitHub
                   </a>
                 )}
                 {studentDetails.portfolio_url && (
                   <a href={studentDetails.portfolio_url} target="_blank" rel="noopener noreferrer"
-                     className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm">
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm">
                     Portfolio
                   </a>
                 )}

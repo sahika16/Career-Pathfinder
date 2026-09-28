@@ -29,11 +29,8 @@ import PersonalizedTrainerDashboard from './pages/dashboard/PersonalizedTrainerD
 import AdminRecruiters from './pages/AdminRecruiters'
 import LearningResourcesPage from './pages/LearningResourcesPage'
 import EnrollmentPage from './pages/EnrollmentPage'
-
-// ============ NEW IMPORTS FOR POSITION FLOW ============
 import RecruiterPositions from './pages/RecruiterPositions'
 import AdminRecommendations from './pages/AdminRecommendations'
-// =======================================================
 
 const USER_STORAGE_KEY = 'careerUser'
 const LOGIN_TIME_KEY = 'careerLoginTime'
@@ -63,8 +60,7 @@ function AppContent() {
       }
 
       try {
-        const userData = JSON.parse(storedUser)
-        setUser(userData)
+        setUser(JSON.parse(storedUser))
       } catch (e) {
         sessionStorage.removeItem(USER_STORAGE_KEY)
         sessionStorage.removeItem(LOGIN_TIME_KEY)
@@ -74,29 +70,25 @@ function AppContent() {
   }
 
   const handleLogin = (userData) => {
-    setUser(userData)
     sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData))
     sessionStorage.setItem(LOGIN_TIME_KEY, Date.now().toString())
+    setUser(userData)
 
-    if (userData.role === 'student') {
-      navigate('/student-dashboard')
-    } else if (userData.role === 'admin') {
-      navigate('/admin-dashboard')
-    } else if (userData.role === 'member') {
-      navigate('/member-dashboard')
-    } else if (userData.role === 'trainer') {
-      if (userData.category === 'personalized') {
-        navigate('/personalized-dashboard')
-      } else {
-        navigate('/trainer-dashboard')
+    setTimeout(() => {
+      const role = userData.role
+      const category = userData.category
+
+      if (role === 'student') navigate('/student-dashboard')
+      else if (role === 'admin') navigate('/admin-dashboard')
+      else if (role === 'member') navigate('/member-dashboard')
+      else if (role === 'trainer') {
+        if (category === 'personalized') navigate('/personalized-dashboard')
+        else navigate('/trainer-dashboard')
       }
-    } else if (userData.role === 'institute') {
-      navigate('/institute-dashboard')
-    } else if (userData.role === 'recruiter') {
-      navigate('/recruiter-dashboard')
-    } else {
-      navigate('/student-dashboard')
-    }
+      else if (role === 'institute') navigate('/institute-dashboard')
+      else if (role === 'recruiter') navigate('/recruiter-dashboard')
+      else navigate('/student-dashboard')
+    }, 0)
   }
 
   const handleLogout = () => {
@@ -119,27 +111,22 @@ function AppContent() {
 
   return (
     <Routes>
-      {/* Public Routes */}
       <Route path="/" element={<LandingPage user={user} onLogout={handleLogout} />} />
 
-      {/* Login Routes */}
       <Route path="/login/student" element={<StudentLogin onLogin={handleLogin} />} />
       <Route path="/login/trainer" element={<TrainerLoginPage />} />
       <Route path="/login/admin" element={<AdminLoginPage onLogin={handleLogin} />} />
       <Route path="/login/institute" element={<InstituteLoginPage onLogin={handleLogin} />} />
       <Route path="/login/recruiter" element={<RecruiterLoginPage />} />
 
-      {/* Registration Routes */}
       <Route path="/trainer/register" element={<TrainerRegistration />} />
       <Route path="/student/register" element={<StudentRegistration />} />
       <Route path="/institute/register" element={<InstituteRegistration />} />
       <Route path="/recruiter/register" element={<RecruiterRegistration />} />
 
-      {/* Skill Routes */}
       <Route path="/skill-review/:resumeId" element={<SkillReviewPage user={user} onLogout={handleLogout} />} />
       <Route path="/skill-rating/:resumeId" element={<SkillRatingPage user={user} onLogout={handleLogout} />} />
 
-      {/* Assessment Routes */}
       <Route path="/assessment/:resumeId/:skillName" element={
         <ProtectedRoute user={user} allowedRoles={['student']}>
           <AssessmentPage user={user} onLogout={handleLogout} />
@@ -152,7 +139,6 @@ function AppContent() {
         </ProtectedRoute>
       } />
 
-      {/* Admin Routes */}
       <Route path="/admin-dashboard" element={
         <ProtectedRoute user={user} allowedRoles={['admin']}>
           <AdminDashboard user={user} onLogout={handleLogout} />
@@ -189,15 +175,12 @@ function AppContent() {
         </ProtectedRoute>
       } />
 
-      {/* ============ NEW: ADMIN RECOMMENDATIONS ============ */}
       <Route path="/admin/position/:positionId/recommend" element={
         <ProtectedRoute user={user} allowedRoles={['admin']}>
           <AdminRecommendations user={user} onLogout={handleLogout} />
         </ProtectedRoute>
       } />
-      {/* =================================================== */}
 
-      {/* Dashboard Routes */}
       <Route path="/member-dashboard" element={
         <ProtectedRoute user={user} allowedRoles={['member']}>
           <MemberDashboard user={user} onLogout={handleLogout} />
@@ -205,59 +188,51 @@ function AppContent() {
       } />
 
       <Route path="/trainer-dashboard" element={
-        <ProtectedRoute user={user} allowedRoles={['trainer']}>
+        <ProtectedRoute user={user} allowedRoles={['trainer', 'personalized_trainer']}>
           <RegularTrainerDashboard user={user} onLogout={handleLogout} />
         </ProtectedRoute>
       } />
 
       <Route path="/personalized-dashboard" element={
-        <ProtectedRoute user={user} allowedRoles={['trainer']}>
+        <ProtectedRoute user={user} allowedRoles={['trainer', 'personalized_trainer']}>
           <PersonalizedTrainerDashboard user={user} onLogout={handleLogout} />
         </ProtectedRoute>
       } />
 
-      {/* Institute Dashboard */}
       <Route path="/institute-dashboard" element={
         <ProtectedRoute user={user} allowedRoles={['institute']}>
           <InstituteDashboard user={user} onLogout={handleLogout} />
         </ProtectedRoute>
       } />
 
-      {/* Recruiter Dashboard */}
       <Route path="/recruiter-dashboard" element={
         <ProtectedRoute user={user} allowedRoles={['recruiter']}>
           <RecruiterDashboard user={user} onLogout={handleLogout} />
         </ProtectedRoute>
       } />
 
-      {/* ============ NEW: RECRUITER POSITIONS ============ */}
       <Route path="/recruiter/positions" element={
         <ProtectedRoute user={user} allowedRoles={['recruiter']}>
           <RecruiterPositions user={user} onLogout={handleLogout} />
         </ProtectedRoute>
       } />
-      {/* ================================================ */}
 
-      {/* Learning Resources - PUBLIC */}
       <Route path="/learning-resources" element={<LearningResourcesPage user={user} onLogout={handleLogout} />} />
 
-      {/* Enrollment Page */}
       <Route path="/enroll" element={
         <ProtectedRoute user={user} allowedRoles={['student']}>
           <EnrollmentPage user={user} onLogout={handleLogout} />
         </ProtectedRoute>
       } />
 
-      {/* Student Dashboard */}
       <Route path="/student-dashboard" element={
         <ProtectedRoute user={user} allowedRoles={['student']}>
           <StudentDashboard user={user} onLogout={handleLogout} />
         </ProtectedRoute>
       } />
 
-      {/* Universal Dashboard */}
       <Route path="/dashboard" element={
-        <ProtectedRoute user={user} allowedRoles={['student', 'trainer', 'admin', 'member', 'institute', 'recruiter']}>
+        <ProtectedRoute user={user} allowedRoles={['student', 'trainer', 'personalized_trainer', 'admin', 'member', 'institute', 'recruiter']}>
           {user?.role === 'student' && <StudentDashboard user={user} onLogout={handleLogout} />}
           {user?.role === 'trainer' && user?.category === 'personalized' && <PersonalizedTrainerDashboard user={user} onLogout={handleLogout} />}
           {user?.role === 'trainer' && user?.category !== 'personalized' && <RegularTrainerDashboard user={user} onLogout={handleLogout} />}

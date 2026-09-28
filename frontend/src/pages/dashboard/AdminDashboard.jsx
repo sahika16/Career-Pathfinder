@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../../components/Navbar'
-import { getAllQuestions, getAllSkillNames, getAllResumes } from '../../utils/api'
+import { getAllResumes } from '../../utils/api'
 import API_BASE_URL from '../../config'
 
 function AdminDashboard({ user, onLogout }) {
@@ -20,51 +20,58 @@ function AdminDashboard({ user, onLogout }) {
   }, [])
 
   const fetchStats = async () => {
-    try {
-      setLoading(true)
-      setError(null)
+    setLoading(true)
+    setError(null)
 
-      const resumes = await getAllResumes()
-      const students = resumes.filter(r => r.role === 'student' || !r.role)
-      const trainers = resumes.filter(r => r.role === 'trainer')
+    // Fire ALL requests at the same time (parallel), not one after another
+    const [resumesRes, trainersRes, institutesRes, recruitersRes] =
+      await Promise.allSettled([
+        getAllResumes(),
+        fetch(`${API_BASE_URL}/admin/trainers`).then(r => (r.ok ? r.json() : [])),
+        fetch(`${API_BASE_URL}/admin/institutes`).then(r => (r.ok ? r.json() : [])),
+        fetch(`${API_BASE_URL}/admin/recruiters`).then(r => (r.ok ? r.json() : [])),
+      ])
 
-      // Fetch institutes count
-      let totalInstitutes = 0
-      try {
-        const instRes = await fetch(`${API_BASE_URL}/admin/institutes`)
-        if (instRes.ok) {
-          const institutes = await instRes.json()
-          totalInstitutes = institutes.length
-        }
-      } catch (e) {
-        console.error('Error fetching institute stats:', e)
-      }
+    const resumes =
+      resumesRes.status === 'fulfilled' && Array.isArray(resumesRes.value)
+        ? resumesRes.value
+        : []
 
-      // Fetch recruiters count
-      let totalRecruiters = 0
-      try {
-        const recRes = await fetch(`${API_BASE_URL}/admin/recruiters`)
-        if (recRes.ok) {
-          const recruiters = await recRes.json()
-          totalRecruiters = recruiters.length
-        }
-      } catch (e) {
-        console.error('Error fetching recruiter stats:', e)
-      }
+    const trainers =
+      trainersRes.status === 'fulfilled' && Array.isArray(trainersRes.value)
+        ? trainersRes.value
+        : []
 
-      setStats({
-        students: students.length || 0,
-        trainers: trainers.length || 0,
-        institutes: totalInstitutes,
-        recruiters: totalRecruiters,
-      })
+    const institutes =
+      institutesRes.status === 'fulfilled' && Array.isArray(institutesRes.value)
+        ? institutesRes.value
+        : []
 
-    } catch (err) {
-      console.error('Error fetching stats:', err)
+    const recruiters =
+      recruitersRes.status === 'fulfilled' && Array.isArray(recruitersRes.value)
+        ? recruitersRes.value
+        : []
+
+    const students = resumes.filter(r => r.role === 'student' || !r.role)
+
+    setStats({
+      students: students.length,
+      trainers: trainers.length,
+      institutes: institutes.length,
+      recruiters: recruiters.length,
+    })
+
+    // Only show error if EVERYTHING failed
+    if (
+      resumesRes.status === 'rejected' &&
+      trainersRes.status === 'rejected' &&
+      institutesRes.status === 'rejected' &&
+      recruitersRes.status === 'rejected'
+    ) {
       setError('Failed to load dashboard data.')
-    } finally {
-      setLoading(false)
     }
+
+    setLoading(false)
   }
 
   const goTo = (path) => {
@@ -104,7 +111,6 @@ function AdminDashboard({ user, onLogout }) {
           </div>
         )}
 
-        {/* Stats Row — 4 cards, evenly spaced */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200">
             <p className="text-sm font-medium text-gray-500">Learners</p>
@@ -130,10 +136,7 @@ function AdminDashboard({ user, onLogout }) {
           </div>
         </div>
 
-        {/* Action Cards — 4 cards, nice size */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-
-          {/* Learners */}
           <div
             onClick={() => goTo('/admin/students')}
             className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200 hover:shadow-md transition cursor-pointer group"
@@ -152,7 +155,6 @@ function AdminDashboard({ user, onLogout }) {
             </div>
           </div>
 
-          {/* Trainers */}
           <div
             onClick={() => goTo('/admin/trainers')}
             className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200 hover:shadow-md transition cursor-pointer group"
@@ -171,7 +173,6 @@ function AdminDashboard({ user, onLogout }) {
             </div>
           </div>
 
-          {/* Institutes */}
           <div
             onClick={() => goTo('/admin/institutes')}
             className="bg-white rounded-2xl shadow-sm p-6 border border-pink-200 hover:shadow-md transition cursor-pointer group"
@@ -190,7 +191,6 @@ function AdminDashboard({ user, onLogout }) {
             </div>
           </div>
 
-          {/* Recruiters */}
           <div
             onClick={() => goTo('/admin/recruiters')}
             className="bg-white rounded-2xl shadow-sm p-6 border border-teal-200 hover:shadow-md transition cursor-pointer group"
@@ -208,10 +208,9 @@ function AdminDashboard({ user, onLogout }) {
               Manage Recruiters →
             </div>
           </div>
-
         </div>
 
-         <div className="mt-8">
+        <div className="mt-8">
           <div
             onClick={() => goTo('/admin/skills')}
             className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200 hover:shadow-md transition cursor-pointer group flex items-center justify-between max-w-md"

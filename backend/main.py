@@ -1420,6 +1420,7 @@ def get_all_students(db: Session = Depends(get_db)):
     
     return result
 
+
 @app.get("/api/admin/trainers")
 def get_all_trainers(db: Session = Depends(get_db)):
     trainers = db.query(models.Trainer).order_by(models.Trainer.created_at.desc()).all()
@@ -4642,35 +4643,50 @@ def set_recruiter_status(recruiter_id: int, data: dict, db: Session = Depends(ge
         "is_approved": recruiter.is_approved,
     }
 
+from sqlalchemy import text as _sql_text
+
 @app.put("/api/admin/student/{student_id}/toggle-recruiter-visibility")
 def toggle_recruiter_visibility(student_id: int, data: dict, db: Session = Depends(get_db)):
-    """Admin approves/hides student profile from recruiters"""
-    student = db.query(models.Resume).filter(models.Resume.id == student_id).first()
-    if not student:
-        raise HTTPException(status_code=404, detail="Student not found")
-    
-    is_visible = data.get('is_visible_to_recruiters', True)
+    """Admin approves/hides student profile from recruiters.
+    Uses raw SQL so it works even if the ORM model is stale."""
+    is_visible = bool(data.get('is_visible_to_recruiters', True))
     admin_notes = data.get('admin_notes', None)
-    
-    student.is_visible_to_recruiters = is_visible
-    if is_visible:
-        student.approved_by_admin_at = datetime.now(timezone.utc)
-        if admin_notes:
-            student.admin_notes = admin_notes
-    else:
-        student.approved_by_admin_at = None
-    
+
+    # Verify student exists
+    exists = db.execute(
+        _sql_text("SELECT id FROM resumes WHERE id = :sid"),
+        {"sid": student_id}
+    ).fetchone()
+    if not exists:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    db.execute(
+        _sql_text("""
+            UPDATE resumes
+            SET is_visible_to_recruiters = :visible,
+                approved_by_admin_at = :approved_at,
+                admin_notes = COALESCE(:notes, admin_notes)
+            WHERE id = :sid
+        """),
+        {
+            "visible": is_visible,
+            "approved_at": datetime.now(timezone.utc) if is_visible else None,
+            "notes": admin_notes if is_visible else None,
+            "sid": student_id,
+        }
+    )
     db.commit()
-    db.refresh(student)
-    
+    row = db.execute(
+        _sql_text("SELECT is_visible_to_recruiters FROM resumes WHERE id = :sid"),
+        {"sid": student_id}
+    ).fetchone()
+
     return {
         "message": f"Student visibility set to {is_visible}",
-        "id": student.id,
-        "is_visible_to_recruiters": student.is_visible_to_recruiters
+        "id": student_id,
+        "is_visible_to_recruiters": bool(row[0]) if row else is_visible,
     }
 
-
-# ============ RECRUITER: VIEW STUDENTS ============
 
 @app.get("/api/recruiter/students")
 def get_recruiter_students(
@@ -5006,15 +5022,19 @@ def recruiter_stats(recruiter_id: int, db: Session = Depends(get_db)):
         models.ProfileRecommendation.recruiter_id == recruiter_id
     ).all()
 
+    def count(statuses):
+        return len([r for r in all_recs if r.status in statuses])
+
     return {
         "activePositions": len(positions),
         "profilesReceived": len(all_recs),
-        "newProfiles": len([r for r in all_recs if r.status == "sent"]),
-        "shortlisted": len([r for r in all_recs if r.status == "shortlisted"]),
-        "interviews": len([r for r in all_recs if r.status == "interview"]),
-        "selected": len([r for r in all_recs if r.status in ("selected", "offered", "joined")])
+        "newProfiles": count(["sent"]),
+        "shortlisted": count(["shortlisted"]),
+        "interviews": count(["interview"]),
+        "selected": count(["selected", "offered", "joined"]),
+        "onHold": count(["on_hold"]),
+        "rejected": count(["rejected"]),
     }
-
 
 @app.get("/api/admin/position/{position_id}/matching-students")
 def get_matching_students(position_id: int, db: Session = Depends(get_db)):
@@ -5290,12 +5310,16 @@ def mark_viewed(rec_id: int, db: Session = Depends(get_db)):
 
 @app.put("/api/recruiter/recommendation/{rec_id}/status")
 def update_recommendation_status(rec_id: int, data: dict, db: Session = Depends(get_db)):
-    """Update status: shortlisted, interview, selected, rejected, etc."""
-    valid = {"viewed", "shortlisted", "interview", "selected", "offered", "joined", "rejected"}
+    """Update status through the hiring pipeline."""
+    valid = {
+        "viewed", "shortlisted", "interview",
+        "selected", "offered", "joined",
+        "rejected", "on_hold",
+    }
     new_status = data.get("status")
 
     if new_status not in valid:
-        raise HTTPException(status_code=400, detail=f"Invalid status. Allowed: {valid}")
+        raise HTTPException(status_code=400, detail=f"Invalid status. Allowed: {sorted(valid)}")
 
     r = db.query(models.ProfileRecommendation).filter(
         models.ProfileRecommendation.id == rec_id
@@ -5309,7 +5333,6 @@ def update_recommendation_status(rec_id: int, data: dict, db: Session = Depends(
 
     db.commit()
     return {"message": "Status updated", "status": r.status}
-
 
 @app.put("/api/recruiter/recommendation/{rec_id}/feedback")
 def submit_feedback(rec_id: int, data: dict, db: Session = Depends(get_db)):
